@@ -32,15 +32,30 @@ class Decision:
 
 
 class Detector:
-    """Small deterministic pre-dispatch guard for repeat/no-progress behavior."""
+    """Deterministic pre-dispatch guard: identical-tool loops + max step cap."""
 
-    def __init__(self, loop_threshold: int = 3) -> None:
+    def __init__(self, loop_threshold: int = 3, max_iterations: int | None = None) -> None:
         if loop_threshold < 2:
             raise ValueError("loop_threshold must be at least 2")
+        if max_iterations is not None and max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1")
         self.loop_threshold = loop_threshold
+        self.max_iterations = max_iterations
         self._recent: dict[str, list[str]] = {}
+        self._counts: dict[str, int] = {}
 
     def evaluate(self, call: ToolCall) -> Decision:
+        count = self._counts.get(call.agent_id, 0) + 1
+        self._counts[call.agent_id] = count
+
+        if self.max_iterations is not None and count > self.max_iterations:
+            return Decision(
+                action="blocked",
+                reason=f"Session exceeded max_iterations={self.max_iterations}",
+                risk_score=95,
+                matched_policies=("max_iterations",),
+            )
+
         history = self._recent.setdefault(call.agent_id, [])
         history.append(call.fingerprint)
         history[:] = history[-self.loop_threshold :]
@@ -55,3 +70,4 @@ class Detector:
 
     def reset(self, agent_id: str) -> None:
         self._recent.pop(agent_id, None)
+        self._counts.pop(agent_id, None)
