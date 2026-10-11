@@ -8,12 +8,13 @@ from .supabase_logger import SupabaseLogger
 
 
 class LoopDetectedException(RuntimeError):
-    def __init__(self, session_id: str, tool_name: str, fingerprint: str, cycle_length: int) -> None:
+    def __init__(self, session_id: str, tool_name: str, fingerprint: str, cycle_length: int, reason: str | None = None) -> None:
         self.session_id = session_id
         self.tool_name = tool_name
         self.fingerprint = fingerprint
         self.cycle_length = cycle_length
-        super().__init__(f"Loop detected for {tool_name} after {cycle_length} identical calls")
+        message = reason or f"Loop detected for {tool_name} after {cycle_length} identical calls"
+        super().__init__(message)
 
 
 class BudgetExceededException(RuntimeError):
@@ -70,7 +71,7 @@ class LoopBreakerHandler:
                 mark_loop_alert(self.session_id)
             except ImportError:
                 pass
-            raise LoopDetectedException(self.session_id, tool_name, call.fingerprint, self.detector.loop_threshold)
+            raise LoopDetectedException(self.session_id, tool_name, call.fingerprint, self.detector.loop_threshold, reason=decision.reason)
         output = execute(args)
         self.logger.log_tool_call(self.session_id, tool_name, args, output, model_name=self.model_name, agent_id=self.agent_id)
         self.current_spend += self.logger.last_cost_usd
