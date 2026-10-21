@@ -12,12 +12,9 @@ type NeuralCoreSceneProps = {
   emergencyStopped: boolean;
   isolatedAgentId: string | null;
   onSelectAgent: (id: string) => void;
-  demoMode?: boolean;
 };
 
-type GraphAgent = AgentSignal & { synthetic?: boolean };
-
-const GRAPH_HELPER_ID = "__runtime_supervisor_graph_helper__";
+type GraphAgent = AgentSignal;
 const NEURAL_UP = new THREE.Vector3(0, 1, 0);
 
 const PARTICLE_VERTEX_SHADER = `
@@ -186,7 +183,6 @@ function AnimatedParticles({
 
 function isCritical(agent: GraphAgent, emergencyStopped: boolean) {
   if (emergencyStopped) return true;
-  if (agent.synthetic) return false;
   return /loop|critical|danger|error|fail|blocked|high/i.test(agent.risk ?? "");
 }
 
@@ -215,12 +211,10 @@ function AgentNode({
     ? 0.58
     : isolationActive && !isolated
       ? 0.16
-      : agent.synthetic
-        ? 0.74
-        : 0.96;
+      : 0.96;
   const hit = (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
-    if (!agent.synthetic) onSelect(agent.id);
+    onSelect(agent.id);
   };
 
   return (
@@ -271,35 +265,19 @@ function AgentNode({
       {selected && !emergencyStopped && (
         <pointLight color={color} intensity={1.1} distance={1.8} />
       )}
-      {agent.synthetic && (
-        <Text
-          position={[0, 0.34, 0]}
-          fontSize={0.082}
-          lineHeight={1.15}
-          color="#b9f5ff"
-          anchorX="center"
-          anchorY="middle"
-          outlineWidth={0.006}
-          outlineColor="#071018"
-        >
-          EXTERNAL DEMO AGENT{`\n`}GRAPH-ONLY · NOT PROTECTED
-        </Text>
-      )}
-      {!agent.synthetic && (
-        <Text
-          position={[0, -0.24, 0]}
-          fontSize={0.082}
-          maxWidth={0.95}
-          textAlign="center"
-          color={critical ? "#ff9baa" : "#a8f4ff"}
-          anchorX="center"
-          anchorY="middle"
-          outlineWidth={0.006}
-          outlineColor="#071018"
-        >
-          {agent.name}
-        </Text>
-      )}
+      <Text
+        position={[0, -0.24, 0]}
+        fontSize={0.082}
+        maxWidth={0.95}
+        textAlign="center"
+        color={critical ? "#ff9baa" : "#a8f4ff"}
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.006}
+        outlineColor="#071018"
+      >
+        {agent.name}
+      </Text>
     </group>
   );
 }
@@ -586,33 +564,12 @@ export default function NeuralCoreScene({
   emergencyStopped,
   isolatedAgentId,
   onSelectAgent,
-  demoMode = false,
 }: NeuralCoreSceneProps) {
   const reducedMotion = useReducedMotion();
   const motionEnabled = running && !emergencyStopped;
   const ambientGeometry = useMemo(makeAmbientParticles, []);
-  const graphAgents = useMemo<GraphAgent[]>(() => {
-    const visibleAgents = agents.slice(0, 8);
-    if (demoMode && visibleAgents.length < 6) {
-      return [
-        ...visibleAgents,
-        {
-          id: GRAPH_HELPER_ID,
-          name: "External Demo Agent",
-          synthetic: true,
-          risk: "graph-only helper",
-        },
-      ];
-    }
-    return visibleAgents;
-  }, [agents, demoMode]);
-  const syntheticCount = graphAgents.filter(agent => agent.synthetic).length;
-  const liveCount = graphAgents.length - syntheticCount;
-  const summary = `${liveCount} ${demoMode ? "DEMO" : "SCOPED"} AGENT${liveCount === 1 ? "" : "S"} • ${
-    syntheticCount
-      ? `${syntheticCount} SYNTHETIC GRAPH HELPER${syntheticCount === 1 ? "" : "S"}`
-      : "NO SYNTHETIC NODES"
-  }`;
+  const graphAgents = useMemo<GraphAgent[]>(() => agents, [agents]);
+  const summary = `${graphAgents.length} WORKSPACE AGENT NODE${graphAgents.length === 1 ? "" : "S"}`;
 
   useEffect(() => () => ambientGeometry.dispose(), [ambientGeometry]);
 

@@ -1,1 +1,1 @@
-export { default } from "./AgentBreakerConsole";
+export { default } from "./SovereignHaltDashboard";
