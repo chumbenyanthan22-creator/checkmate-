@@ -1,18 +1,16 @@
-# AgentBreaker control-plane outcomes
+# AgentBreaker client-ready MVP outcomes
 
-- **Deliver one dense AgentBreaker runtime cockpit, not a two-part landing page.** Use the supplied image only as a visual reference: a deep black, high-density telemetry console with a prominent central 3D AI core, compact status and analytics panels around it, and controls in the same viewport. Reinterpret its content for AI agent runtime/security; do not copy the reference's trading identity or unsupported trading metrics. Keep persistent app navigation and the existing AgentBreaker product identity.
-- **Deliver a real moving 3D neural-core scene at the center of the cockpit.** Implement it with React Three Fiber, drei, and Three.js; render a procedural, lobulated two-hemisphere point cloud, moving scan geometry, and clickable agent-linked 3D nodes in a live Canvas, not a static image or CSS-only scene. Selecting an agent must update the 3D focus/readout; allow pause/resume, export of the local runtime log, agent isolation and recalibration; respect reduced-motion preference.
-- **Deliver the desktop-first AgentBreaker application shell with dark cyberpunk security-console styling and left navigation for Overview, Agent Registry, Policies, Approvals, Audit Trail, and Settings.** Keep all six destinations visible in the left navigation and allow the user to switch sections without a page reload.
-- **Deliver the Overview dashboard as a single operational viewport with functional seeded/live metrics and monitoring surfaces.** Show a KPI strip for Protected Agents, Actions Today, Blocked Actions, and Spend Guarded; include a working time-range control that changes displayed mock metrics; integrate a live activity feed, status and agent filters, risk distribution, cost telemetry, and incident/approval controls into the same cockpit instead of adding a separate below-the-fold landing-page section.
-- **Deliver the Agent Registry and clickable agent detail view.** Seed Invoice Agent, Support Resolution Agent, and Vendor Verification Agent with status, class, risk level, budget, and recent activity; selecting an agent must open a governance profile with budget context, recent actions, and operating status. Selecting a node in the 3D scene must update its focused-node readout; the scene's Open profile action must reach the matching profile.
-- **Deliver the Policies section with representative runtime guardrails and client-side controls.** Show policy rules for tool access, approval thresholds, spend limits, loop detection, and data handling; toggling a policy must immediately reflect its active or paused state.
-- **Deliver approval and response interactions.** Users must be able to approve or block a pending action, and trigger a clearly presented emergency stop; the resulting state must be reflected in the activity feed and approval queue, and the 3D scene must communicate emergency/blocked status in red.
-- **Deliver Audit Trail and Settings sections with realistic seeded records and representative configuration controls.** Keep the existing application data flow and interactions; do not remove the current demo/Supabase loading behavior.
-- **Deliver a working static route manifest and preserve project metadata.** Serve `/manus-routes.json` for the root page and preserve the existing project logo metadata.
+- [x] **Deliver one dense AgentBreaker runtime cockpit, not a stacked landing page.** Use the supplied image only as visual inspiration: keep the app navigation, central neural core, compact operational panels, and useful controls in the same application view. Do not copy trading branding, data, or metrics.
+- [x] **Remove fabricated dashboard data.** Do not show seeded/sample agents, policies, approvals, events, identities, workspace labels, counts, spend, percentages, or status claims as real. Show only values returned from an explicitly scoped workspace query; otherwise show a clear loading, workspace-not-configured, empty, or error state. Do not query tenant tables without `VITE_SUPABASE_WORKSPACE_ID` or query alert/tool-log tables without tenant scope.
+- [x] **Keep the center a real autonomous 3D scene.** Use React Three Fiber, drei, and Three.js to render the procedural neural-core point cloud, scan geometry, and connected agent nodes in a WebGL Canvas—not an image or CSS mock. Core and particles move on their own by default, including with no agent records; pause/resume remains available, and reduced-motion preference lowers motion rather than silently stopping it.
+- [x] **Keep all product sections in the same app shell.** Preserve Overview, Agent Registry, Policies, Approvals, Audit Trail, and Settings, add Plans & Pricing, and switch views without a page reload.
+- [x] **Make operational controls and claims honest.** Existing local-only approval, policy, and emergency-stop controls must be identified as preview-only until persistence/runtime integrations exist. Export must contain only loaded records and real metadata.
+- [x] **Add the requested pricing models.** Display a 30-day free trial, a Popular plan at `$299/month`, and an Enterprise plan at `$1,499/month`. Keep plan selection informational until a billing/checkout integration exists.
+- [x] **Preserve the root route and project metadata.** Keep `/manus-routes.json` accurate for the single application route and preserve project logo metadata.
 
 ## Cost tracking (existing open implementation outcomes)
 
-- Add estimate-based `CostCalculator` with config-loaded model pricing.
-- Persist estimated output tokens, model name, and calculated cost for every tool execution.
-- Increment `agent_sessions.current_spend_usd` from logged tool costs.
-- Add cached daily spend aggregation and dashboard cost trend/per-call cost display.
+- [ ] Add estimate-based `CostCalculator` with config-loaded model pricing.
+- [ ] Persist estimated output tokens, model name, and calculated cost for every tool execution.
+- [ ] Increment `agent_sessions.current_spend_usd` from logged tool costs.
+- [ ] Add cached daily spend aggregation and dashboard cost trend/per-call cost display.

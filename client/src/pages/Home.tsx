@@ -7,21 +7,20 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Clock3,
   Code2,
   Database,
-  Eye,
   FileCheck2,
   FileClock,
   FileText,
   Gauge,
-  Headphones,
   LayoutDashboard,
   LockKeyhole,
   Menu,
   MoreHorizontal,
   Network,
+  Pause,
+  Play,
   Power,
   RefreshCw,
   Search,
@@ -30,299 +29,1177 @@ import {
   Shield,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   UserCheck,
   X,
   XCircle,
+  type LucideIcon,
 } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import "../cyberpunk.css";
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { DEMO_WORKSPACE_ID, supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, workspaceId } from "@/lib/supabase";
 import { toast } from "sonner";
 
-const AgentCoreScene = lazy(() => import("../components/AgentCoreScene"));
+const RuntimeCoreScene = lazy(() => import("../components/AgentCoreScene"));
 
-type ViewId = "overview" | "agents" | "policies" | "approvals" | "audit" | "settings";
+type DataState =
+  | "loading"
+  | "unconfigured"
+  | "scope_missing"
+  | "connected"
+  | "empty"
+  | "error";
 type ActivityStatus = "allowed" | "blocked" | "approval";
-type RiskLevel = "Low" | "Medium" | "High" | "Critical";
+type ViewId =
+  | "overview"
+  | "agents"
+  | "policies"
+  | "approvals"
+  | "audit"
+  | "plans"
+  | "settings";
 
-type Agent = {
+type SceneAgent = {
   id: string;
   name: string;
-  description: string;
-  icon: typeof Bot;
-  status: "Active" | "Paused" | "Review";
-  className: "Standard" | "Privileged";
-  risk: RiskLevel;
-  budget: string;
-  calls: string;
-  lastSeen: string;
-  accent: string;
+  status: string;
+  risk: string;
+  calls?: string;
 };
-
-type ActivityEvent = {
-  id: number;
+type SceneMetric = {
+  agents: string;
+  approvals: string;
+  events: string;
+  blocked: string;
+};
+type DashboardEvent = {
+  id: string;
   agent: string;
   agentId: string;
   action: string;
   detail: string;
   status: ActivityStatus;
-  risk: RiskLevel;
+  risk: string;
   time: string;
-  timeSort: number;
+  createdAt: string | null;
   cost?: string;
 };
-
-type SpendPoint = { day: string; total: number };
-
+type DashboardApproval = {
+  id: string;
+  agent: string;
+  action: string;
+  detail: string;
+  risk: string;
+  age: string;
+};
 type Policy = {
-  id: number;
+  id: string;
   title: string;
   description: string;
   scope: string;
   state: boolean;
-  icon: typeof Shield;
-  accent: string;
 };
+type AgentRecord = SceneAgent & { description: string; className: string };
 
-const navItems: { id: ViewId; label: string; icon: typeof LayoutDashboard; badge?: string }[] = [
+const navItems: { id: ViewId; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "agents", label: "Agent Registry", icon: Bot, badge: "12" },
+  { id: "agents", label: "Agent Registry", icon: Bot },
   { id: "policies", label: "Policies", icon: ShieldCheck },
-  { id: "approvals", label: "Approvals", icon: UserCheck, badge: "3" },
+  { id: "approvals", label: "Approvals", icon: UserCheck },
   { id: "audit", label: "Audit Trail", icon: FileClock },
+  { id: "plans", label: "Plans & Pricing", icon: Gauge },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-const agents: Agent[] = [
-  { id: "invoice", name: "Invoice Agent", description: "Reads invoices, matches purchase orders, and prepares payment drafts.", icon: FileText, status: "Active", className: "Privileged", risk: "High", budget: "$2.00 / session", calls: "1,284", lastSeen: "18 sec ago", accent: "mint" },
-  { id: "support", name: "Support Resolution Agent", description: "Resolves tickets, drafts replies, and routes sensitive customer issues.", icon: Headphones, status: "Active", className: "Standard", risk: "Medium", budget: "$0.50 / session", calls: "8,921", lastSeen: "34 sec ago", accent: "violet" },
-  { id: "vendor", name: "Vendor Verification Agent", description: "Verifies supplier identity, registration, and compliance evidence.", icon: FileCheck2, status: "Review", className: "Privileged", risk: "Critical", budget: "$1.25 / session", calls: "642", lastSeen: "2 min ago", accent: "amber" },
-];
-
-const baseActivity: ActivityEvent[] = [
-  { id: 1, agent: "Invoice Agent", agentId: "invoice", action: "create_draft_payment", detail: "₹148,000 vendor payment draft", status: "approval", risk: "High", time: "1 min ago", timeSort: 1 },
-  { id: 2, agent: "Support Resolution Agent", agentId: "support", action: "update_ticket", detail: "Ticket #4821 marked resolved", status: "allowed", risk: "Low", time: "3 min ago", timeSort: 3 },
-  { id: 3, agent: "Vendor Verification Agent", agentId: "vendor", action: "export_vendor_data", detail: "External destination blocked", status: "blocked", risk: "Critical", time: "6 min ago", timeSort: 6 },
-  { id: 4, agent: "Invoice Agent", agentId: "invoice", action: "read_invoice", detail: "Invoice INV-2048 parsed", status: "allowed", risk: "Low", time: "8 min ago", timeSort: 8 },
-  { id: 5, agent: "Support Resolution Agent", agentId: "support", action: "send_email", detail: "Reply sent to customer", status: "allowed", risk: "Medium", time: "12 min ago", timeSort: 12 },
-  { id: 6, agent: "Vendor Verification Agent", agentId: "vendor", action: "fetch_gst_record", detail: "Verification source responded", status: "allowed", risk: "Medium", time: "18 min ago", timeSort: 18 },
-  { id: 7, agent: "Invoice Agent", agentId: "invoice", action: "read_invoice", detail: "Loop threshold reached", status: "blocked", risk: "High", time: "23 min ago", timeSort: 23 },
-];
-
-const seededPolicies: Policy[] = [
-  { id: 1, title: "Privileged action approval", description: "Pause financial mutations and permission changes until a verified operator approves.", scope: "Privileged agents", state: true, icon: LockKeyhole, accent: "mint" },
-  { id: 2, title: "Tool-call budget guard", description: "Stop sessions that exceed the assigned dollar or tool-call budget.", scope: "All agents", state: true, icon: CircleDollarSign, accent: "violet" },
-  { id: 3, title: "Loop and no-progress detection", description: "Block repeated tool sequences when state or output does not advance.", scope: "All agents", state: true, icon: RefreshCw, accent: "amber" },
-  { id: 4, title: "Tool access allowlist", description: "Allow only approved tools and schemas for each registered agent.", scope: "All tool calls", state: true, icon: ShieldCheck, accent: "mint" },
-  { id: 5, title: "External data export", description: "Require approval before sensitive records leave the trusted workspace.", scope: "Data-handling tools", state: false, icon: Database, accent: "coral" },
-];
-
-const rangeMetrics: Record<string, { agents: string; actions: string; blocked: string; spend: string; delta: string }> = {
-  "24h": { agents: "12", actions: "18.4k", blocked: "29", spend: "$1,284", delta: "+12.6%" },
-  "7d": { agents: "16", actions: "92.8k", blocked: "184", spend: "$7,492", delta: "+21.4%" },
-  "30d": { agents: "19", actions: "421.6k", blocked: "1,032", spend: "$34,901", delta: "+28.8%" },
+const statusLabel: Record<ActivityStatus, string> = {
+  allowed: "Allowed",
+  blocked: "Blocked",
+  approval: "Approval required",
+};
+const statusClass: Record<ActivityStatus, string> = {
+  allowed: "status-allowed",
+  blocked: "status-blocked",
+  approval: "status-approval",
 };
 
-const statusLabel: Record<ActivityStatus, string> = { allowed: "Allowed", blocked: "Blocked", approval: "Approval required" };
-const riskClass: Record<RiskLevel, string> = { Low: "risk-low", Medium: "risk-medium", High: "risk-high", Critical: "risk-critical" };
-const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
-const iconForAgent = (slug: string) => ({ invoice: FileText, support: Headphones, vendor: FileCheck2 }[slug] ?? Bot);
-const iconForPolicy = (title: string) => title.toLowerCase().includes("budget") ? CircleDollarSign : title.toLowerCase().includes("loop") ? RefreshCw : title.toLowerCase().includes("export") ? Database : title.toLowerCase().includes("privileged") ? LockKeyhole : ShieldCheck;
-const relatedAgentField = (value: unknown, field: "name" | "slug") => { if (Array.isArray(value)) return (value[0] as Record<string, string> | undefined)?.[field]; if (value && typeof value === "object") return (value as Record<string, string>)[field]; return undefined; };
-const formatUsd = (value: number) => `$${value.toFixed(value < 0.01 ? 4 : 2)}`;
+function titleCase(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+function text(value: unknown): string {
+  return value === null || value === undefined || value === ""
+    ? "—"
+    : String(value);
+}
+function related(value: unknown, field: string): string | undefined {
+  if (Array.isArray(value)) return related(value[0], field);
+  if (value && typeof value === "object")
+    return text((value as Record<string, unknown>)[field]);
+  return undefined;
+}
+function relativeTime(value: unknown): string {
+  if (!value) return "—";
+  const timestamp = new Date(String(value)).getTime();
+  if (!Number.isFinite(timestamp)) return String(value);
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+function activityStatus(value: unknown): ActivityStatus | null {
+  const normalized = String(value ?? "").toLowerCase();
+  if (["allowed", "allow", "success", "completed"].includes(normalized))
+    return "allowed";
+  if (["blocked", "block", "denied", "rejected"].includes(normalized))
+    return "blocked";
+  if (
+    ["approval", "pending", "review", "approval_required"].includes(normalized)
+  )
+    return "approval";
+  return null;
+}
+function risk(value: unknown): string {
+  return text(value);
+}
 
 function LogoMark() {
-  return <div className="logo-mark" aria-label="AgentBreaker logo"><ShieldCheck size={19} strokeWidth={2.5} /><span className="logo-break">/</span></div>;
+  return (
+    <div className="logo-mark" aria-label="AgentBreaker logo">
+      <ShieldCheck size={19} strokeWidth={2.5} />
+      <span className="logo-break">/</span>
+    </div>
+  );
 }
-
-function StatusPill({ status }: { status: ActivityStatus }) {
-  const Icon = status === "allowed" ? CheckCircle2 : status === "blocked" ? XCircle : Clock3;
-  return <span className={`status-pill status-${status}`}><Icon size={13} /> {statusLabel[status]}</span>;
-}
-
-function ProgressBar({ value, color = "mint" }: { value: number; color?: string }) { return <div className="progress-track"><div className={`progress-fill fill-${color}`} style={{ width: `${value}%` }} /></div>; }
-
-export default function Home() {
-  const [activeView, setActiveView] = useState<ViewId>("overview");
-  const [timeRange, setTimeRange] = useState("24h");
-  const [activityFilter, setActivityFilter] = useState<"all" | ActivityStatus>("all");
-  const [agentFilter, setAgentFilter] = useState("all");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [policies, setPolicies] = useState(seededPolicies);
-  const [events, setEvents] = useState(baseActivity);
-  const [approvals, setApprovals] = useState([
-    { id: "APR-2048", agent: "Invoice Agent", action: "create_draft_payment", detail: "₹148,000 to Helius Components", risk: "High" as RiskLevel, age: "1 min ago" },
-    { id: "APR-2044", agent: "Support Resolution Agent", action: "issue_refund", detail: "₹12,500 refund for ticket #4819", risk: "High" as RiskLevel, age: "8 min ago" },
-    { id: "APR-2037", agent: "Vendor Verification Agent", action: "share_compliance_record", detail: "Share with new banking partner", risk: "Critical" as RiskLevel, age: "14 min ago" },
-  ]);
-  const [emergencyStopped, setEmergencyStopped] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [dataSource, setDataSource] = useState<"seed" | "supabase">("seed");
-  const [spendTrend, setSpendTrend] = useState<SpendPoint[]>([]);
-  const [sessionSpend, setSessionSpend] = useState(0);
-  const metrics = rangeMetrics[timeRange];
-  const [liveAgents, setAgentsFromSupabase] = useState<Agent[] | null>(null);
-  const activeAgents = liveAgents ?? agents;
-  const selectedAgent = activeAgents.find((agent) => agent.id === selectedAgentId) ?? null;
-  const filteredEvents = useMemo(() => events.filter((event) => (activityFilter === "all" || event.status === activityFilter) && (agentFilter === "all" || event.agentId === agentFilter)), [events, activityFilter, agentFilter]);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadLiveWorkspace = async () => {
-      const client = supabase;
-      if (!mounted || !client) return;
-      const [agentsResult, policiesResult, approvalsResult, auditResult, alertsResult, toolLogsResult] = await Promise.all([
-        client.from("agents").select("id,slug,name,description,status,agent_class,risk_level,budget_cents,tool_calls,last_seen_at").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
-        client.from("policies").select("id,title,description,scope,enabled").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
-        client.from("approvals").select("id,reference,action,detail,risk_level,requested_at,agent_id,agents(name,slug)").eq("workspace_id", DEMO_WORKSPACE_ID).eq("status", "pending").order("requested_at"),
-        client.from("audit_events").select("id,agent_id,agent_name,action,detail,outcome,risk_level,created_at,agents(slug)").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at", { ascending: false }).limit(12),
-        client.from("agent_alerts").select("id,session_id,alert_type,fingerprint,cycle_length,created_at").order("created_at", { ascending: false }).limit(8),
-        client.from("tool_execution_logs").select("session_id,agent_id,tool_name,cost_incurred,output_tokens_estimated,model_name,executed_at").order("executed_at", { ascending: false }).limit(1000),
-      ]);
-      if (!mounted || agentsResult.error || policiesResult.error || approvalsResult.error || auditResult.error || alertsResult.error || toolLogsResult.error) return;
-      const liveAgents = (agentsResult.data ?? []).map((row) => ({
-        id: row.slug,
-        name: row.name,
-        description: row.description,
-        icon: iconForAgent(row.slug),
-        status: titleCase(row.status) as Agent["status"],
-        className: titleCase(row.agent_class) as Agent["className"],
-        risk: titleCase(row.risk_level) as RiskLevel,
-        budget: `$${(row.budget_cents / 100).toFixed(2)} / session`,
-        calls: row.tool_calls.toLocaleString(),
-        lastSeen: "live",
-        accent: row.slug === "invoice" ? "mint" : row.slug === "support" ? "violet" : "amber",
-      }));
-      const livePolicies = (policiesResult.data ?? []).map((row) => ({ id: Number.parseInt(row.id.slice(0, 8), 16), title: row.title, description: row.description, scope: row.scope, state: row.enabled, icon: iconForPolicy(row.title), accent: row.title.toLowerCase().includes("export") ? "coral" : row.title.toLowerCase().includes("budget") ? "violet" : row.title.toLowerCase().includes("loop") ? "amber" : "mint" }));
-      const liveApprovals = (approvalsResult.data ?? []).map((row) => ({ id: row.reference, agent: relatedAgentField(row.agents, "name") ?? "Agent", action: row.action, detail: row.detail, risk: titleCase(row.risk_level) as RiskLevel, age: "live" }));
-      const liveEvents = (auditResult.data ?? []).map((row, index) => ({ id: index + 100, agent: row.agent_name, agentId: relatedAgentField(row.agents, "slug") ?? "workspace", action: row.action, detail: row.detail, status: row.outcome as ActivityStatus, risk: titleCase(row.risk_level) as RiskLevel, time: "live", timeSort: index }));
-      const liveAlerts = (alertsResult.data ?? []).map((row, index) => ({ id: index + 1000, agent: "Live detector", agentId: "workspace", action: row.alert_type, detail: `Cycle length ${row.cycle_length} blocked before dispatch · ${row.fingerprint.slice(0, 10)}`, status: "blocked" as ActivityStatus, risk: "Critical" as RiskLevel, time: "live", timeSort: index }));
-      const liveToolLogs = (toolLogsResult.data ?? []).map((row, index) => ({ id: index + 2000, agent: row.agent_id ? "Tracked agent" : "Live session", agentId: "workspace", action: row.tool_name, detail: `${row.model_name ?? "configured model"} · ${row.output_tokens_estimated ?? "~"} estimated output tokens`, status: "allowed" as ActivityStatus, risk: "Low" as RiskLevel, time: "live", timeSort: index, cost: formatUsd(Number(row.cost_incurred ?? 0)) }));
-      const trend = new Map<string, number>();
-      (toolLogsResult.data ?? []).forEach((row) => { const day = String(row.executed_at ?? "").slice(0, 10); trend.set(day, (trend.get(day) ?? 0) + Number(row.cost_incurred ?? 0)); });
-      setSessionSpend((toolLogsResult.data ?? []).reduce((total, row) => total + Number(row.cost_incurred ?? 0), 0));
-      setSpendTrend(Array.from(trend, ([day, total]) => ({ day, total })).sort((a, b) => a.day.localeCompare(b.day)));
-      if (liveAgents.length && livePolicies.length && liveApprovals.length && liveEvents.length) {
-        setAgentsFromSupabase(liveAgents);
-        setPolicies(livePolicies);
-        setApprovals(liveApprovals);
-        setEvents([...liveAlerts, ...liveToolLogs, ...liveEvents]);
-        setDataSource("supabase");
-      }
-    };
-    void loadLiveWorkspace();
-    return () => { mounted = false; };
-  }, []);
-
-  const setView = (view: ViewId) => { setActiveView(view); setSelectedAgentId(null); setMobileNavOpen(false); };
-  const openAgent = (id: string) => { setActiveView("agents"); setSelectedAgentId(id); setMobileNavOpen(false); };
-  const togglePolicy = (id: number) => { setPolicies((current) => current.map((policy) => policy.id === id ? { ...policy, state: !policy.state } : policy)); const policy = policies.find((item) => item.id === id); if (policy) toast.success(`${policy.title} ${policy.state ? "paused" : "enabled"}`); };
-  const respondToApproval = (id: string, action: "approved" | "blocked") => {
-    const approval = approvals.find((item) => item.id === id);
-    if (!approval) return;
-    setApprovals((current) => current.filter((item) => item.id !== id));
-    const agentId = approval.agent.includes("Invoice") ? "invoice" : approval.agent.includes("Support") ? "support" : "vendor";
-    setEvents((current) => [{ id: Date.now(), agent: approval.agent, agentId, action: approval.action, detail: `${approval.detail} · ${action}`, status: action === "approved" ? "allowed" : "blocked", risk: approval.risk, time: "just now", timeSort: 0 }, ...current]);
-    toast[action === "approved" ? "success" : "error"](`${approval.action} ${action}`);
-  };
-  const triggerEmergencyStop = () => {
-    const nextStopped = !emergencyStopped;
-    setEmergencyStopped(nextStopped);
-    if (nextStopped) setEvents((current) => [{ id: Date.now(), agent: "Workspace", agentId: "workspace", action: "emergency_stop", detail: "All autonomous actions paused by Rohan Kapoor", status: "blocked", risk: "Critical", time: "just now", timeSort: 0 }, ...current]);
-    toast[nextStopped ? "error" : "success"](nextStopped ? "Emergency stop engaged across 12 agents" : "Runtime resumed");
-  };
-
-  return <div className="app-shell">
-    <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
-      <div className="brand-lockup"><LogoMark /><div><div className="brand-name">AgentBreaker</div><div className="brand-subtitle">Runtime control plane</div></div></div>
-      <div className="workspace-switcher"><div className="workspace-avatar">A</div><div className="workspace-copy"><span>Acme Systems</span><small>Production workspace</small></div><ChevronDown size={15} /></div>
-      <div className="nav-label">Control center</div>
-      <nav className="nav-list">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activeView === item.id ? "nav-item-active" : ""}`} onClick={() => setView(item.id)}><Icon size={17} /><span>{item.label}</span>{item.badge && <span className="nav-badge">{item.id === "approvals" ? approvals.length : item.badge}</span>}</button>; })}</nav>
-      <div className="sidebar-spacer" />
-      <div className="runtime-card"><div className="runtime-card-header"><span className="live-dot" /> Runtime enforcement <span className="runtime-live">LIVE</span></div><p>All tool calls are evaluated before dispatch.</p><div className="runtime-stat"><span>Policy coverage</span><strong>98.4%</strong></div><ProgressBar value={98.4} /></div>
-      <button className="user-card" onClick={() => setView("settings")}><div className="user-avatar">RK</div><div><strong>Rohan Kapoor</strong><small>Owner · Admin</small></div><MoreHorizontal size={17} /></button>
-    </aside>
-    <main className="main-content">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNavOpen((current) => !current)}><Menu size={20} /></button><div className="breadcrumb"><span>Control center</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === activeView)?.label}</strong></div><div className="topbar-actions"><div className="system-state"><span className="live-dot" /> {dataSource === "supabase" ? "Supabase synced" : "Demo data"}</div><button className="icon-button" aria-label="Notifications"><span className="notification-dot" /><Clock3 size={18} /></button><div className="topbar-divider" /><button className="icon-button" aria-label="Search"><Search size={18} /></button></div></header>
-      {emergencyStopped && <div className="emergency-banner"><div><Power size={18} /><strong>Emergency stop engaged</strong><span>All autonomous actions are paused. Review the event stream before resuming.</span></div><button onClick={triggerEmergencyStop}>Resume runtime</button></div>}
-      <div className={`content-wrap ${activeView === "overview" ? "content-wrap-immersive" : ""} ${emergencyStopped ? "emergency-visible" : ""}`}>
-        {activeView === "overview" && <OverviewView metrics={metrics} timeRange={timeRange} setTimeRange={setTimeRange} events={filteredEvents} activityFilter={activityFilter} setActivityFilter={setActivityFilter} agentFilter={agentFilter} setAgentFilter={setAgentFilter} approvals={approvals} onApproval={respondToApproval} onEmergencyStop={triggerEmergencyStop} emergencyStopped={emergencyStopped} onAgentSelect={openAgent} onOpenAudit={() => setView("audit")} onOpenApprovals={() => setView("approvals")} agents={activeAgents} spendTrend={spendTrend} sessionSpend={sessionSpend} />}
-        {activeView === "agents" && <AgentsView agents={activeAgents} onSelect={setSelectedAgentId} selectedAgent={selectedAgent} onEmergencyStop={triggerEmergencyStop} emergencyStopped={emergencyStopped} />}
-        {activeView === "policies" && <PoliciesView agents={activeAgents} policies={policies} onToggle={togglePolicy} />}
-        {activeView === "approvals" && <ApprovalsView approvals={approvals} onRespond={respondToApproval} />}
-        {activeView === "audit" && <AuditView events={events} />}
-        {activeView === "settings" && <SettingsView emergencyStopped={emergencyStopped} onEmergencyStop={triggerEmergencyStop} />}
+function PageHeader({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-header">
+      <div>
+        <div className="eyebrow">
+          <span className="eyebrow-line" />
+          {eyebrow}
+        </div>
+        <h1>{title}</h1>
+        <p>{description}</p>
       </div>
-    </main>
-  </div>;
+      {action}
+    </div>
+  );
+}
+function StatusPill({ status }: { status: ActivityStatus }) {
+  const Icon =
+    status === "allowed"
+      ? CheckCircle2
+      : status === "blocked"
+        ? XCircle
+        : Clock3;
+  return (
+    <span className={`status-pill ${statusClass[status]}`}>
+      <Icon size={13} /> {statusLabel[status]}
+    </span>
+  );
+}
+function DataStatePanel({
+  state,
+  onRetry,
+  compact = false,
+}: {
+  state: Exclude<DataState, "connected">;
+  onRetry?: () => void;
+  compact?: boolean;
+}) {
+  const copy: Record<
+    Exclude<DataState, "connected">,
+    { title: string; detail: string }
+  > = {
+    loading: {
+      title: "Loading workspace data",
+      detail: "Waiting for the scoped Supabase workspace query to complete.",
+    },
+    unconfigured: {
+      title: "Supabase is not configured",
+      detail:
+        "Add the Supabase URL and publishable key to load workspace data.",
+    },
+    scope_missing: {
+      title: "Workspace scope is missing",
+      detail:
+        "Set VITE_SUPABASE_WORKSPACE_ID before workspace data can be requested.",
+    },
+    empty: {
+      title: "No workspace data yet",
+      detail:
+        "The selected workspace has no agents, approvals, or audit events to display.",
+    },
+    error: {
+      title: "Workspace data could not be loaded",
+      detail:
+        "Supabase returned an error for one or more scoped workspace queries.",
+    },
+  };
+  return (
+    <section
+      className={`panel empty-state ${compact ? "data-state-notice" : "tall"}`}
+      role="status"
+    >
+      <AlertTriangle size={22} />
+      <div>
+        <strong>{copy[state].title}</strong>
+        <p>{copy[state].detail}</p>
+        {onRetry && (
+          <button className="secondary-button" onClick={onRetry}>
+            <RefreshCw size={14} /> Retry
+          </button>
+        )}
+      </div>
+    </section>
+  );
 }
 
-function PageHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) { return <div className="page-header"><div><div className="eyebrow"><span className="eyebrow-line" />{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>; }
+function isWithinTimeRange(createdAt: string | null, range: string): boolean {
+  if (!createdAt) return false;
+  const timestamp = new Date(createdAt).getTime();
+  if (!Number.isFinite(timestamp) || timestamp > Date.now()) return false;
+  const hours = range === "7d" ? 24 * 7 : range === "30d" ? 24 * 30 : 24;
+  return Date.now() - timestamp <= hours * 60 * 60 * 1000;
+}
 
-function OverviewView({ metrics, timeRange, setTimeRange, events, activityFilter, setActivityFilter, agentFilter, setAgentFilter, approvals, onApproval, onEmergencyStop, emergencyStopped, onAgentSelect, onOpenAudit, onOpenApprovals, agents, spendTrend, sessionSpend }: {
-  metrics: typeof rangeMetrics["24h"];
+type HomeSceneProps = {
+  dataState: DataState;
+  agents: SceneAgent[];
+  metrics: SceneMetric;
   timeRange: string;
   setTimeRange: (range: string) => void;
-  events: ActivityEvent[];
+  events: DashboardEvent[];
   activityFilter: "all" | ActivityStatus;
   setActivityFilter: (filter: "all" | ActivityStatus) => void;
   agentFilter: string;
   setAgentFilter: (filter: string) => void;
-  approvals: { id: string; agent: string; action: string; detail: string; risk: RiskLevel; age: string }[];
+  approvals: DashboardApproval[];
   onApproval: (id: string, action: "approved" | "blocked") => void;
   onEmergencyStop: () => void;
   emergencyStopped: boolean;
   onAgentSelect: (id: string) => void;
   onOpenAudit: () => void;
   onOpenApprovals: () => void;
-  agents: Agent[];
-  spendTrend: SpendPoint[];
-  sessionSpend: number;
-}) {
+};
+
+type LegacySceneProps = Omit<HomeSceneProps, "metrics"> & {
+  metrics: SceneMetric & { actions: string; spend: string; delta: string };
+  spendTrend: never[];
+  sessionSpend?: number;
+};
+const LegacyRuntimeCore =
+  RuntimeCoreScene as unknown as ComponentType<LegacySceneProps>;
+function AgentCoreScene(props: HomeSceneProps) {
+  const metrics = {
+    ...props.metrics,
+    actions: props.metrics.events,
+    spend: "—",
+    delta: "—",
+  };
+  return <LegacyRuntimeCore {...props} metrics={metrics} spendTrend={[]} />;
+}
+
+export default function Home() {
+  const [activeView, setActiveView] = useState<ViewId>("overview");
+  const [timeRange, setTimeRange] = useState("24h");
+  const [activityFilter, setActivityFilter] = useState<"all" | ActivityStatus>(
+    "all"
+  );
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [dataState, setDataState] = useState<DataState>("loading");
+  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [events, setEvents] = useState<DashboardEvent[]>([]);
+  const [approvals, setApprovals] = useState<DashboardApproval[]>([]);
+  const [emergencyStopped, setEmergencyStopped] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadWorkspace = async () => {
+      if (!isSupabaseConfigured) {
+        setDataState("unconfigured");
+        return;
+      }
+      if (!workspaceId) {
+        setDataState("scope_missing");
+        return;
+      }
+      const client = supabase;
+      if (!client) {
+        setDataState("unconfigured");
+        return;
+      }
+      setDataState("loading");
+      setAgents([]);
+      setPolicies([]);
+      setApprovals([]);
+      setEvents([]);
+      const scoped = (table: string, fields: string) =>
+        client.from(table).select(fields).eq("workspace_id", workspaceId);
+      try {
+        const [agentsResult, policiesResult, approvalsResult, auditResult] =
+          await Promise.all([
+            scoped(
+              "agents",
+              "id, name, slug, description, status, risk_level, tool_calls, agent_class"
+            ),
+            scoped("policies", "id, title, description, scope, enabled"),
+            scoped(
+              "approvals",
+              "id, reference, agent_id, action, detail, risk_level, requested_at, agents(name)"
+            ).eq("status", "pending"),
+            scoped(
+              "audit_events",
+              "id, agent_id, agent_name, action, detail, outcome, risk_level, created_at, agents(name)"
+            ),
+          ]);
+        if (!mounted) return;
+        if (
+          agentsResult.error ||
+          policiesResult.error ||
+          approvalsResult.error ||
+          auditResult.error
+        ) {
+          setDataState("error");
+          return;
+        }
+
+        const nextAgents: AgentRecord[] = (agentsResult.data ?? []).map(row => {
+          const item = row as unknown as Record<string, unknown>;
+          return {
+            id: text(item.id),
+            name: text(item.name ?? item.slug),
+            description: text(item.description),
+            status: titleCase(text(item.status)),
+            risk: risk(item.risk_level),
+            calls:
+              item.tool_calls === null || item.tool_calls === undefined
+                ? undefined
+                : String(item.tool_calls),
+            className: titleCase(text(item.agent_class)),
+          };
+        });
+        const nextPolicies: Policy[] = (policiesResult.data ?? []).map(row => {
+          const item = row as unknown as Record<string, unknown>;
+          return {
+            id: text(item.id),
+            title: text(item.title),
+            description: text(item.description),
+            scope: text(item.scope),
+            state: Boolean(item.enabled),
+          };
+        });
+        const nextApprovals: DashboardApproval[] = (
+          approvalsResult.data ?? []
+        ).map(row => {
+          const item = row as unknown as Record<string, unknown>;
+          const joined = related(item.agents, "name");
+          return {
+            id: text(item.reference ?? item.id),
+            agent: text(joined ?? item.agent_id),
+            action: text(item.action),
+            detail: text(item.detail),
+            risk: risk(item.risk_level),
+            age: relativeTime(item.requested_at),
+          };
+        });
+        const nextEvents: DashboardEvent[] = (auditResult.data ?? []).flatMap(
+          row => {
+            const item = row as unknown as Record<string, unknown>;
+            const status = activityStatus(item.outcome);
+            if (!status) return [];
+            const createdAt =
+              typeof item.created_at === "string" ? item.created_at : null;
+            return [
+              {
+                id: text(item.id),
+                agent: text(
+                  item.agent_name ??
+                    related(item.agents, "name") ??
+                    item.agent_id
+                ),
+                agentId: text(item.agent_id),
+                action: text(item.action),
+                detail: text(item.detail),
+                status,
+                risk: risk(item.risk_level),
+                time: relativeTime(createdAt),
+                createdAt,
+                cost:
+                  item.cost === null || item.cost === undefined
+                    ? undefined
+                    : text(item.cost),
+              },
+            ];
+          }
+        );
+        setAgents(nextAgents);
+        setPolicies(nextPolicies);
+        setApprovals(nextApprovals);
+        setEvents(nextEvents);
+        setDataState(
+          nextAgents.length ||
+            nextPolicies.length ||
+            nextApprovals.length ||
+            nextEvents.length
+            ? "connected"
+            : "empty"
+        );
+      } catch {
+        if (mounted) setDataState("error");
+      }
+    };
+    void loadWorkspace();
+    return () => {
+      mounted = false;
+    };
+  }, [loadVersion]);
+
+  const timeFilteredEvents = useMemo(
+    () => events.filter(event => isWithinTimeRange(event.createdAt, timeRange)),
+    [events, timeRange]
+  );
+  const filteredEvents = useMemo(
+    () =>
+      timeFilteredEvents.filter(
+        event =>
+          (activityFilter === "all" || event.status === activityFilter) &&
+          (agentFilter === "all" || event.agentId === agentFilter)
+      ),
+    [timeFilteredEvents, activityFilter, agentFilter]
+  );
+  const querySucceeded = dataState === "connected" || dataState === "empty";
+  const metrics: SceneMetric = querySucceeded
+    ? {
+        agents: String(agents.length),
+        approvals: String(approvals.length),
+        events: String(timeFilteredEvents.length),
+        blocked: String(
+          timeFilteredEvents.filter(event => event.status === "blocked").length
+        ),
+      }
+    : { agents: "—", approvals: "—", events: "—", blocked: "—" };
+  const selectedAgent = agents.find(agent => agent.id === agentFilter) ?? null;
+  const setView = (view: ViewId) => {
+    setActiveView(view);
+    setMobileNavOpen(false);
+  };
+  const openAgent = (id: string) => {
+    setAgentFilter(id);
+    setView("agents");
+  };
+  const togglePolicy = (id: string) => {
+    setPolicies(current =>
+      current.map(policy =>
+        policy.id === id ? { ...policy, state: !policy.state } : policy
+      )
+    );
+    toast.info(
+      "Preview only: policy state changed locally; Supabase was not updated."
+    );
+  };
+  const respondToApproval = (id: string, action: "approved" | "blocked") => {
+    setApprovals(current => current.filter(approval => approval.id !== id));
+    toast.info(
+      `Preview only: action marked ${action}; no runtime action was sent.`
+    );
+  };
+  const toggleEmergencyStop = () => {
+    setEmergencyStopped(stopped => !stopped);
+    toast.info(
+      "Preview only: emergency control changed locally; no live runtime was stopped or resumed."
+    );
+  };
+
   return (
-    <Suspense fallback={<section className="panel cp-control-deck cp-control-deck-loading" aria-label="Loading the 3D runtime dashboard"><span className="cp-loading-orbit" />Loading live 3D runtime core…</section>}>
-      <AgentCoreScene
-        agents={agents}
-        metrics={metrics}
-        timeRange={timeRange}
-        setTimeRange={setTimeRange}
-        events={events}
-        activityFilter={activityFilter}
-        setActivityFilter={setActivityFilter}
-        agentFilter={agentFilter}
-        setAgentFilter={setAgentFilter}
-        approvals={approvals}
-        onApproval={onApproval}
-        onEmergencyStop={onEmergencyStop}
-        emergencyStopped={emergencyStopped}
-        onAgentSelect={onAgentSelect}
-        onOpenAudit={onOpenAudit}
-        onOpenApprovals={onOpenApprovals}
-        spendTrend={spendTrend}
-        sessionSpend={sessionSpend}
-      />
-    </Suspense>
+    <div className="app-shell">
+      <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
+        <div className="brand-lockup">
+          <LogoMark />
+          <div>
+            <div className="brand-name">AgentBreaker</div>
+            <div className="brand-subtitle">Runtime control plane</div>
+          </div>
+        </div>
+        <div className="workspace-switcher">
+          <div className="workspace-avatar">W</div>
+          <div className="workspace-copy">
+            <span>
+              {workspaceId ? "Scoped workspace" : "Workspace not selected"}
+            </span>
+            <small>
+              {workspaceId ? workspaceId : "Configure a workspace scope"}
+            </small>
+          </div>
+          <ChevronDown size={15} />
+        </div>
+        <div className="nav-label">Control center</div>
+        <nav className="nav-list">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                className={`nav-item ${activeView === item.id ? "nav-item-active" : ""}`}
+                onClick={() => setView(item.id)}
+              >
+                <Icon size={17} />
+                <span>{item.label}</span>
+                {item.id === "approvals" && approvals.length > 0 && (
+                  <span className="nav-badge">{approvals.length}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="sidebar-spacer" />
+        <div className="runtime-card">
+          <div className="runtime-card-header">
+            <span className="preview-dot" /> Local controls{" "}
+            <span className="runtime-live">PREVIEW</span>
+          </div>
+          <p>
+            Policy, approval, and emergency controls are local-only previews.
+          </p>
+        </div>
+        <button className="user-card" onClick={() => setView("settings")}>
+          <div className="user-avatar">—</div>
+          <div>
+            <strong>Local operator</strong>
+            <small>No identity connected</small>
+          </div>
+          <MoreHorizontal size={17} />
+        </button>
+      </aside>
+      <main className="main-content">
+        <header className="topbar">
+          <button
+            className="mobile-menu"
+            onClick={() => setMobileNavOpen(current => !current)}
+          >
+            <Menu size={20} />
+          </button>
+          <div className="breadcrumb">
+            <span>Control center</span>
+            <ChevronRight size={14} />
+            <strong>
+              {navItems.find(item => item.id === activeView)?.label}
+            </strong>
+          </div>
+          <div className="topbar-actions">
+            <div className={`system-state system-state-${dataState}`}>
+              {dataState === "connected"
+                ? "Supabase scoped"
+                : dataState.replace("_", " ")}
+            </div>
+          </div>
+        </header>
+        {emergencyStopped && (
+          <div className="emergency-banner">
+            <div>
+              <Power size={18} />
+              <strong>Preview stop enabled</strong>
+              <span>No live runtime action was sent.</span>
+            </div>
+            <button onClick={toggleEmergencyStop}>Resume preview</button>
+          </div>
+        )}
+        <div
+          className={`content-wrap ${activeView === "overview" ? "content-wrap-immersive" : ""} ${emergencyStopped ? "emergency-visible" : ""}`}
+        >
+          {activeView === "overview" && (
+            <OverviewView
+              dataState={dataState}
+              metrics={metrics}
+              timeRange={timeRange}
+              setTimeRange={setTimeRange}
+              events={filteredEvents}
+              activityFilter={activityFilter}
+              setActivityFilter={setActivityFilter}
+              agentFilter={agentFilter}
+              setAgentFilter={setAgentFilter}
+              approvals={approvals}
+              onApproval={respondToApproval}
+              onEmergencyStop={toggleEmergencyStop}
+              emergencyStopped={emergencyStopped}
+              onAgentSelect={openAgent}
+              onOpenAudit={() => setView("audit")}
+              onOpenApprovals={() => setView("approvals")}
+              agents={agents}
+              onRetry={() => setLoadVersion(version => version + 1)}
+            />
+          )}
+          {activeView === "agents" && (
+            <AgentsView
+              dataState={dataState}
+              agents={agents}
+              selectedAgent={selectedAgent}
+              onSelect={openAgent}
+              onRetry={() => setLoadVersion(version => version + 1)}
+            />
+          )}
+          {activeView === "policies" && (
+            <PoliciesView
+              dataState={dataState}
+              policies={policies}
+              onToggle={togglePolicy}
+              onRetry={() => setLoadVersion(version => version + 1)}
+            />
+          )}
+          {activeView === "approvals" && (
+            <ApprovalsView
+              dataState={dataState}
+              approvals={approvals}
+              onRespond={respondToApproval}
+              onRetry={() => setLoadVersion(version => version + 1)}
+            />
+          )}
+          {activeView === "audit" && (
+            <AuditView
+              dataState={dataState}
+              events={events}
+              onRetry={() => setLoadVersion(version => version + 1)}
+            />
+          )}
+          {activeView === "plans" && <PlansView />}
+          {activeView === "settings" && (
+            <SettingsView
+              dataState={dataState}
+              stopped={emergencyStopped}
+              onEmergencyStop={toggleEmergencyStop}
+            />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
 
-function StatusIcon({ status }: { status: ActivityStatus }) { return status === "allowed" ? <Check size={15} /> : status === "blocked" ? <X size={15} /> : <Clock3 size={15} />; }
-function LegendItem({ label, value, color }: { label: string; value: string; color: string }) { return <div className="legend-item"><span className={`legend-swatch swatch-${color}`} /><span>{label}</span><strong>{value}</strong></div>; }
+function OverviewView(
+  props: HomeSceneProps & { onRetry: () => void; agents: AgentRecord[] }
+) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Agent runtime control plane"
+        title="Welcome to AgentBreaker"
+        description="The 3D workspace stays visible while only verified, explicitly scoped records are shown."
+      />
+      {props.dataState !== "connected" && (
+        <DataStatePanel
+          compact
+          state={props.dataState}
+          onRetry={props.dataState === "error" ? props.onRetry : undefined}
+        />
+      )}
+      <Suspense
+        fallback={
+          <section className="panel cp-control-deck cp-control-deck-loading">
+            <span className="cp-loading-orbit" />
+            Loading runtime view…
+          </section>
+        }
+      >
+        <AgentCoreScene
+          dataState={props.dataState}
+          agents={props.agents}
+          metrics={props.metrics}
+          timeRange={props.timeRange}
+          setTimeRange={props.setTimeRange}
+          events={props.events}
+          activityFilter={props.activityFilter}
+          setActivityFilter={props.setActivityFilter}
+          agentFilter={props.agentFilter}
+          setAgentFilter={props.setAgentFilter}
+          approvals={props.approvals}
+          onApproval={props.onApproval}
+          onEmergencyStop={props.onEmergencyStop}
+          emergencyStopped={props.emergencyStopped}
+          onAgentSelect={props.onAgentSelect}
+          onOpenAudit={props.onOpenAudit}
+          onOpenApprovals={props.onOpenApprovals}
+        />
+      </Suspense>
+    </>
+  );
+}
 
-function ApprovalPanel({ approvals, onRespond, onOpen }: { approvals: { id: string; agent: string; action: string; detail: string; risk: RiskLevel; age: string }[]; onRespond: (id: string, action: "approved" | "blocked") => void; onOpen: () => void }) { return <section className="panel approval-panel"><div className="panel-header"><div><div className="panel-kicker"><span className="pulse-dot" /> Needs your decision</div><h2>Approval queue <span className="count-badge">{approvals.length}</span></h2></div><button className="icon-button subtle"><MoreHorizontal size={17} /></button></div><div className="approval-list">{approvals.slice(0, 2).map((approval) => <div className="approval-card" key={approval.id}><div className="approval-card-top"><span className={`risk-tag ${riskClass[approval.risk]}`}>{approval.risk} risk</span><small>{approval.age}</small></div><strong>{approval.action}</strong><p>{approval.detail}</p><div className="approval-agent"><div className="mini-avatar"><Bot size={14} /></div>{approval.agent}<span>·</span>{approval.id}</div><div className="approval-actions"><button className="approve-button" onClick={() => onRespond(approval.id, "approved")}><Check size={14} /> Approve</button><button className="block-button" onClick={() => onRespond(approval.id, "blocked")}><X size={14} /> Block</button></div></div>)}{approvals.length === 0 && <div className="empty-state"><CheckCircle2 size={18} />Queue cleared. Nice work.</div>}</div><button className="panel-footer-button" onClick={onOpen}>Open approval queue <ChevronRight size={15} /></button></section>; }
-
-function AgentsView({ agents, onSelect, selectedAgent, onEmergencyStop, emergencyStopped }: { agents: Agent[]; onSelect: (id: string) => void; selectedAgent: Agent | null; onEmergencyStop: () => void; emergencyStopped: boolean }) { return <><PageHeader eyebrow="Agent registry" title="Your protected fleet" description="Know every agent. Bound every action. Keep autonomy accountable." action={<button className={`stop-button ${emergencyStopped ? "resume-button" : ""}`} onClick={onEmergencyStop}>{emergencyStopped ? "Resume runtime" : "Emergency stop"}</button>} /><div className="registry-toolbar"><div className="search-field"><Search size={16} /><input placeholder="Search agents, tools, owners..." /><span>⌘ K</span></div><div className="select-wrap compact"><SlidersHorizontal size={14} /><select><option>All statuses</option><option>Active</option><option>Paused</option></select><ChevronDown size={14} /></div><button className="secondary-button"><Code2 size={15} /> Add agent</button></div>{selectedAgent ? <AgentDetail agent={selectedAgent} onBack={() => onSelect("")} /> : <div className="registry-grid">{agents.map((agent) => { const Icon = agent.icon; return <button key={agent.id} className="agent-card" onClick={() => onSelect(agent.id)}><div className="agent-card-head"><div className={`agent-avatar agent-${agent.accent}`}><Icon size={20} /></div><span className={`agent-status agent-status-${agent.status.toLowerCase()}`}><span className="status-dot" />{agent.status}</span></div><h3>{agent.name}</h3><p>{agent.description}</p><div className="agent-card-meta"><span className="meta-label">Class</span><strong>{agent.className}</strong><span className="meta-label">Risk</span><strong className={riskClass[agent.risk]}>{agent.risk}</strong><span className="meta-label">Budget</span><strong>{agent.budget}</strong></div><div className="agent-card-footer"><span><Activity size={14} /> {agent.calls} tool calls</span><span>Seen {agent.lastSeen}</span><ChevronRight size={15} /></div></button>; })}</div>}</>; }
-
-function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => void }) { const Icon = agent.icon; return <div className="detail-view"><button className="back-button" onClick={onBack}>← Back to registry</button><div className="detail-hero"><div className={`agent-avatar agent-${agent.accent} large`}><Icon size={27} /></div><div><div className="eyebrow"><span className="eyebrow-line" />Agent profile</div><h2>{agent.name}</h2><p>{agent.description}</p></div><span className={`agent-status agent-status-${agent.status.toLowerCase()}`}><span className="status-dot" />{agent.status}</span></div><div className="detail-grid"><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Governance profile</div><h2>Boundaries & permissions</h2></div><button className="secondary-button"><Settings2 size={15} /> Edit profile</button></div><div className="boundary-list"><BoundaryRow icon={LockKeyhole} title="Agent class" value={agent.className} status="Enforced" /><BoundaryRow icon={CircleDollarSign} title="Session budget" value={agent.budget} status="Enforced" /><BoundaryRow icon={ShieldCheck} title="Approval policy" value="Privileged mutations" status="Active" /><BoundaryRow icon={RefreshCw} title="Loop detector" value="Jaccard + sequence" status="Active" /></div></section><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Activity health</div><h2>Last 24 hours</h2></div><Activity size={17} className="muted-icon" /></div><div className="detail-stat-grid"><div><strong>{agent.calls}</strong><span>tool calls</span></div><div><strong>99.1%</strong><span>safe completion</span></div><div><strong>14</strong><span>approvals</span></div><div><strong>3</strong><span>blocked</span></div></div><div className="sparkline"><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /></div></section></div><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Recent actions</div><h2>Decision log</h2></div><button className="text-button">Open full trail <ArrowUpRight size={15} /></button></div><div className="activity-list compact-list">{baseActivity.filter((event) => event.agentId === agent.id).slice(0, 4).map((event) => <div className="activity-row static-row" key={event.id}><div className={`activity-icon activity-${event.status}`}><StatusIcon status={event.status} /></div><div className="activity-main"><div><strong>{event.action}</strong></div><p>{event.detail}</p></div><div className="activity-meta"><span className={`risk-tag ${riskClass[event.risk]}`}>{event.risk}</span><small>{event.time}</small>{event.cost && <small className="activity-cost">{event.cost}</small>}</div></div>)}</div></section></div>; }
-
-function BoundaryRow({ icon: Icon, title, value, status }: { icon: typeof Shield; title: string; value: string; status: string }) { return <div className="boundary-row"><div className="boundary-icon"><Icon size={16} /></div><div><strong>{title}</strong><span>{value}</span></div><span className="boundary-status"><CheckCircle2 size={14} /> {status}</span></div>; }
-
-function PoliciesView({ agents, policies, onToggle }: { agents: Agent[]; policies: Policy[]; onToggle: (id: number) => void }) { const activePolicyCount = policies.filter((policy) => policy.state).length; return <><PageHeader eyebrow="Runtime governance" title="Policies" description="Define what your agents can do before they act." action={<button className="secondary-button"><Sparkles size={15} /> New policy</button>} /><div className="policy-banner"><div className="policy-banner-icon"><ShieldCheck size={22} /></div><div><strong>Policy enforcement is active</strong><p>Every tool call is evaluated locally before it leaves the agent runtime.</p></div><div className="policy-banner-stat"><span>{activePolicyCount} active policies</span><strong>98.4% coverage</strong></div></div><div className="policy-list">{policies.map((policy) => { const Icon = policy.icon; return <div className="policy-row" key={policy.id}><div className={`policy-icon icon-${policy.accent}`}><Icon size={18} /></div><div className="policy-copy"><div><h3>{policy.title}</h3><span className="scope-tag">{policy.scope}</span></div><p>{policy.description}</p></div><div className="policy-state"><span className={`state-label ${policy.state ? "state-on" : "state-off"}`}>{policy.state ? "Active" : "Paused"}</span><button className={`toggle ${policy.state ? "toggle-on" : ""}`} onClick={() => onToggle(policy.id)} aria-label={`Toggle ${policy.title}`}><span /></button><MoreHorizontal size={18} className="muted-icon" /></div></div>; })}</div><div className="two-col-panels"><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Policy health</div><h2>Coverage by agent</h2></div></div>{agents.map((agent) => { const Icon = agent.icon; return <div className="coverage-row" key={agent.id}><div className="coverage-agent"><div className={`mini-avatar agent-${agent.accent}`}><Icon size={14} /></div><span>{agent.name}</span></div><ProgressBar value={agent.id === "vendor" ? 89 : agent.id === "invoice" ? 100 : 96} color={agent.id === "vendor" ? "amber" : "mint"} /><strong>{agent.id === "vendor" ? "89%" : agent.id === "invoice" ? "100%" : "96%"}</strong></div>; })}</section><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Guardrail recipes</div><h2>Recommended next</h2></div></div><div className="recipe-list"><div><Sparkles size={16} /><span>Prompt injection shield</span><button className="text-button">Configure</button></div><div><Network size={16} /><span>Agent-to-agent allowlist</span><button className="text-button">Configure</button></div><div><ServerCog size={16} /><span>Private tool gateway</span><button className="text-button">Configure</button></div></div></section></div></>; }
-
-function ApprovalsView({ approvals, onRespond }: { approvals: { id: string; agent: string; action: string; detail: string; risk: RiskLevel; age: string }[]; onRespond: (id: string, action: "approved" | "blocked") => void }) { return <><PageHeader eyebrow="Human-in-the-loop" title="Approvals" description="High-impact actions pause here until a verified operator decides." action={<div className="header-chip"><Clock3 size={15} /> {approvals.length} pending decisions</div>} /><div className="approval-page-grid"><section className="panel"><div className="panel-header"><div><div className="panel-kicker">Needs attention</div><h2>Pending decisions</h2></div><button className="secondary-button"><SlidersHorizontal size={15} /> Filter</button></div><div className="approval-page-list">{approvals.map((approval) => <div className="approval-page-card" key={approval.id}><div className="approval-page-main"><div className="approval-card-top"><span className={`risk-tag ${riskClass[approval.risk]}`}>{approval.risk} risk</span><span className="approval-id">{approval.id}</span><small>{approval.age}</small></div><h3>{approval.action}</h3><p>{approval.detail}</p><div className="approval-agent"><div className="mini-avatar"><Bot size={14} /></div>{approval.agent} <span>·</span> Privileged mutation</div></div><div className="approval-page-actions"><button className="approve-button" onClick={() => onRespond(approval.id, "approved")}><Check size={14} /> Approve</button><button className="block-button" onClick={() => onRespond(approval.id, "blocked")}><X size={14} /> Block</button></div></div>)}{approvals.length === 0 && <div className="empty-state tall"><CheckCircle2 size={22} />No pending actions. Your queue is clear.</div>}</div></section><section className="panel decision-panel"><div className="panel-header"><div><div className="panel-kicker">Decision context</div><h2>Before you approve</h2></div><ShieldCheck size={18} className="muted-icon" /></div><div className="context-list"><ContextRow icon={UserCheck} title="Initiated by" value="Rohan Kapoor · Owner" /><ContextRow icon={Gauge} title="Policy match" value="Privileged action approval" /><ContextRow icon={CircleDollarSign} title="Spend impact" value="$0.04 estimated" /><ContextRow icon={Database} title="Data accessed" value="Invoice + vendor record" /></div><div className="approval-note"><AlertTriangle size={16} /><span>Approvals expire after 60 minutes. Blocked actions are recorded in the audit trail.</span></div></section></div></>; }
-function ContextRow({ icon: Icon, title, value }: { icon: typeof UserCheck; title: string; value: string }) { return <div className="context-row"><div className="context-icon"><Icon size={15} /></div><div><span>{title}</span><strong>{value}</strong></div></div>; }
-
-function AuditView({ events }: { events: ActivityEvent[] }) { return <><PageHeader eyebrow="Evidence layer" title="Audit trail" description="A complete record of what every agent tried to do, and why it was allowed or stopped." action={<button className="secondary-button"><FileText size={15} /> Export report</button>} /><div className="audit-summary"><div><strong>18,421</strong><span>events retained</span></div><div><strong>99.98%</strong><span>audit availability</span></div><div><strong>24h</strong><span>last indexed</span></div><div><strong>0</strong><span>missing records</span></div></div><section className="panel audit-panel"><div className="audit-toolbar"><div className="search-field"><Search size={16} /><input placeholder="Search actions, agents, IDs..." /></div><div className="select-wrap compact"><select><option>All outcomes</option><option>Allowed</option><option>Blocked</option><option>Approval</option></select><ChevronDown size={14} /></div><button className="icon-button subtle"><SlidersHorizontal size={17} /></button></div><div className="audit-table"><div className="audit-table-head"><span>Outcome</span><span>Action</span><span>Agent</span><span>Risk</span><span>Cost</span><span>Time</span></div>{events.map((event) => <div className="audit-table-row" key={event.id}><StatusPill status={event.status} /><div><strong>{event.action}</strong><small>{event.detail}</small></div><span>{event.agent}</span><span className={`risk-tag ${riskClass[event.risk]}`}>{event.risk}</span><span className="audit-cost">{event.cost ?? "—"}</span><span className="audit-time">{event.time}</span><ChevronRight size={15} /></div>)}</div></section></>; }
-
-function SettingsView({ emergencyStopped, onEmergencyStop }: { emergencyStopped: boolean; onEmergencyStop: () => void }) { return <><PageHeader eyebrow="Workspace configuration" title="Settings" description="Configure the control plane without losing visibility or control." action={<button className="secondary-button"><RefreshCw size={15} /> Sync status</button>} /><div className="settings-layout"><div className="settings-nav"><button className="settings-nav-active"><Settings2 size={16} /> Workspace</button><button><ShieldCheck size={16} /> Security</button><button><Clock3 size={16} /> Notifications</button><button><Code2 size={16} /> Developer tools</button></div><div className="settings-content"><section className="panel settings-panel"><div className="panel-header"><div><div className="panel-kicker">Workspace</div><h2>Acme Systems</h2></div><span className="connected-pill"><span className="status-dot" /> Connected</span></div><SettingRow title="Workspace ID" value="acme-prod-7f29" /><SettingRow title="Default runtime mode" value="Enforce" control={<div className="select-wrap compact"><select defaultValue="enforce"><option value="enforce">Enforce</option><option value="observe">Observe only</option></select><ChevronDown size={14} /></div>} /><SettingRow title="Telemetry retention" value="90 days" control={<div className="select-wrap compact"><select defaultValue="90"><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option></select><ChevronDown size={14} /></div>} /></section><section className="panel settings-panel danger-zone"><div className="panel-header"><div><div className="panel-kicker">Critical controls</div><h2>Runtime controls</h2></div><Power size={18} className="muted-icon" /></div><div className="danger-row"><div><strong>Emergency stop</strong><p>Pause all autonomous tool actions across this workspace.</p></div><button className={`stop-button ${emergencyStopped ? "resume-button" : ""}`} onClick={onEmergencyStop}>{emergencyStopped ? "Resume runtime" : "Engage stop"}</button></div><div className="danger-row"><div><strong>Rotate runtime keys</strong><p>Invalidate and re-issue credentials for connected agents.</p></div><button className="secondary-button">Rotate keys</button></div></section></div></div></>; }
-function SettingRow({ title, value, control }: { title: string; value: string; control?: ReactNode }) { return <div className="setting-row"><div><strong>{title}</strong><span>{value}</span></div>{control ?? <ChevronRight size={16} className="muted-icon" />}</div>; }
+function QueryState({
+  dataState,
+  onRetry,
+}: {
+  dataState: DataState;
+  onRetry: () => void;
+}) {
+  if (dataState === "connected" || dataState === "empty") return null;
+  return (
+    <DataStatePanel
+      state={dataState}
+      onRetry={dataState === "error" ? onRetry : undefined}
+    />
+  );
+}
+function AgentsView({
+  dataState,
+  agents,
+  selectedAgent,
+  onSelect,
+  onRetry,
+}: {
+  dataState: DataState;
+  agents: AgentRecord[];
+  selectedAgent: AgentRecord | null;
+  onSelect: (id: string) => void;
+  onRetry: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
+  const visibleAgents = agents.filter(
+    agent =>
+      !normalizedSearch ||
+      [
+        agent.name,
+        agent.description,
+        agent.className,
+        agent.status,
+        agent.risk,
+      ].some(value => value.toLowerCase().includes(normalizedSearch))
+  );
+  return (
+    <>
+      <PageHeader
+        eyebrow="Inventory"
+        title="Agent registry"
+        description="Agents returned by the selected Supabase workspace."
+      />
+      <QueryState dataState={dataState} onRetry={onRetry} />
+      {(dataState === "connected" || dataState === "empty") && (
+        <>
+          <div className="search-field" role="search">
+            <Search size={16} />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Search loaded agents..."
+              aria-label="Search loaded agents"
+            />
+          </div>
+          <div className="agent-grid">
+            {visibleAgents.map(agent => (
+              <button
+                className={`agent-card ${selectedAgent?.id === agent.id ? "agent-card-selected" : ""}`}
+                key={agent.id}
+                onClick={() => onSelect(agent.id)}
+              >
+                <div className="agent-card-top">
+                  <span className="agent-avatar">
+                    <Bot size={18} />
+                  </span>
+                  <span
+                    className={`status-badge ${agent.status.toLowerCase()}`}
+                  >
+                    <span className="status-dot" />
+                    {agent.status}
+                  </span>
+                </div>
+                <h3>{agent.name}</h3>
+                <p>{agent.description}</p>
+                <div className="agent-card-meta">
+                  <span>{agent.className}</span>
+                  <span>{agent.risk} risk</span>
+                  {agent.calls && <span>{agent.calls} calls</span>}
+                </div>
+              </button>
+            ))}
+            {agents.length === 0 && <DataStatePanel state="empty" />}
+            {agents.length > 0 && visibleAgents.length === 0 && (
+              <div className="empty-state">
+                No loaded agents match “{search}”.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+function PoliciesView({
+  dataState,
+  policies,
+  onToggle,
+  onRetry,
+}: {
+  dataState: DataState;
+  policies: Policy[];
+  onToggle: (id: string) => void;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Guardrails"
+        title="Policies"
+        description="Workspace policies from Supabase. Changes here are preview-only and are not persisted."
+      />
+      <QueryState dataState={dataState} onRetry={onRetry} />
+      {(dataState === "connected" || dataState === "empty") && (
+        <>
+          <div className="policy-grid">
+            {policies.map(policy => (
+              <section className="panel policy-card" key={policy.id}>
+                <div className="policy-card-head">
+                  <div className="policy-icon">
+                    <Shield size={17} />
+                  </div>
+                  <button
+                    className={`toggle ${policy.state ? "toggle-on" : ""}`}
+                    onClick={() => onToggle(policy.id)}
+                    aria-pressed={policy.state}
+                  >
+                    <span />
+                  </button>
+                </div>
+                <h3>{policy.title}</h3>
+                <p>{policy.description}</p>
+                <div className="policy-footer">
+                  <span>{policy.scope}</span>
+                  <strong>{policy.state ? "Enabled" : "Disabled"}</strong>
+                </div>
+              </section>
+            ))}
+            {policies.length === 0 && <DataStatePanel state="empty" />}
+          </div>
+          <p className="muted-note">
+            <AlertTriangle size={14} /> Preview-only policy controls do not
+            write to Supabase or change a live runtime.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+function ApprovalsView({
+  dataState,
+  approvals,
+  onRespond,
+  onRetry,
+}: {
+  dataState: DataState;
+  approvals: DashboardApproval[];
+  onRespond: (id: string, action: "approved" | "blocked") => void;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Human-in-the-loop"
+        title="Approvals"
+        description="Pending actions returned by the selected workspace. Decisions below are local previews."
+      />
+      <QueryState dataState={dataState} onRetry={onRetry} />
+      {(dataState === "connected" || dataState === "empty") && (
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-kicker">Needs attention</div>
+              <h2>Pending decisions</h2>
+            </div>
+            <span className="header-chip">
+              <Clock3 size={15} /> {approvals.length} pending
+            </span>
+          </div>
+          <div className="approval-page-list">
+            {approvals.map(approval => (
+              <div className="approval-page-card" key={approval.id}>
+                <div className="approval-page-main">
+                  <div className="approval-card-top">
+                    <span className="risk-tag">{approval.risk} risk</span>
+                    <span className="approval-id">{approval.id}</span>
+                    <small>{approval.age}</small>
+                  </div>
+                  <h3>{approval.action}</h3>
+                  <p>{approval.detail}</p>
+                  <div className="approval-agent">
+                    <div className="mini-avatar">
+                      <Bot size={14} />
+                    </div>
+                    {approval.agent}
+                  </div>
+                </div>
+                <div className="approval-page-actions">
+                  <button
+                    className="approve-button"
+                    onClick={() => onRespond(approval.id, "approved")}
+                  >
+                    <Check size={14} /> Approve preview
+                  </button>
+                  <button
+                    className="block-button"
+                    onClick={() => onRespond(approval.id, "blocked")}
+                  >
+                    <X size={14} /> Block preview
+                  </button>
+                </div>
+              </div>
+            ))}
+            {approvals.length === 0 && (
+              <div className="empty-state tall">
+                <CheckCircle2 size={22} />
+                No pending workspace approvals.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+function AuditView({
+  dataState,
+  events,
+  onRetry,
+}: {
+  dataState: DataState;
+  events: DashboardEvent[];
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Evidence layer"
+        title="Audit trail"
+        description="Audit events returned by the selected Supabase workspace."
+      />
+      <QueryState dataState={dataState} onRetry={onRetry} />
+      {(dataState === "connected" || dataState === "empty") && (
+        <>
+          <div className="audit-summary">
+            <div>
+              <strong>{events.length}</strong>
+              <span>events loaded</span>
+            </div>
+            <div>
+              <strong>
+                {events.filter(event => event.status === "blocked").length}
+              </strong>
+              <span>blocked events</span>
+            </div>
+            <div>
+              <strong>
+                {events.filter(event => event.status === "approval").length}
+              </strong>
+              <span>approval events</span>
+            </div>
+          </div>
+          <section className="panel audit-panel">
+            <div className="audit-toolbar">
+              <div className="search-field">
+                <Search size={16} />
+                <input placeholder="Search loaded events..." disabled />
+              </div>
+              <div className="select-wrap compact">
+                <select defaultValue="all" disabled>
+                  <option value="all">All outcomes</option>
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            </div>
+            <div className="audit-table">
+              <div className="audit-table-head">
+                <span>Outcome</span>
+                <span>Action</span>
+                <span>Agent</span>
+                <span>Risk</span>
+                <span>Cost</span>
+                <span>Time</span>
+              </div>
+              {events.map(event => (
+                <div className="audit-table-row" key={event.id}>
+                  <StatusPill status={event.status} />
+                  <div>
+                    <strong>{event.action}</strong>
+                    <small>{event.detail}</small>
+                  </div>
+                  <span>{event.agent}</span>
+                  <span className="risk-tag">{event.risk}</span>
+                  <span className="audit-cost">{event.cost ?? "—"}</span>
+                  <span className="audit-time">{event.time}</span>
+                  <ChevronRight size={15} />
+                </div>
+              ))}
+              {events.length === 0 && (
+                <div className="empty-state">No audit events returned.</div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+function PlansView() {
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const selectPlan = (plan: string) => {
+    setSelectedPlan(plan);
+    toast.info(
+      `${plan} selected locally. Billing and checkout are not connected; no purchase was made.`
+    );
+  };
+  return (
+    <>
+      <PageHeader
+        eyebrow="Plans"
+        title="Plans & Pricing"
+        description="Select a plan locally for preview; billing and checkout are not connected."
+      />
+      <div className="pricing-grid">
+        <section
+          className={`panel pricing-card ${selectedPlan === "30-day option" ? "pricing-card-selected" : ""}`}
+        >
+          <div className="panel-kicker">30-day free trial</div>
+          <h2>$0</h2>
+          <p>Explore the control plane before committing to a paid plan.</p>
+          <button
+            className="secondary-button"
+            onClick={() => selectPlan("30-day option")}
+          >
+            Select locally
+          </button>
+        </section>
+        <section
+          className={`panel pricing-card pricing-card-popular ${selectedPlan === "Team" ? "pricing-card-selected" : ""}`}
+        >
+          <span className="pricing-popular">Popular</span>
+          <div className="panel-kicker">Team</div>
+          <h2>$299/month</h2>
+          <p>For teams evaluating ongoing agent oversight.</p>
+          <button className="primary-button" onClick={() => selectPlan("Team")}>
+            Select locally
+          </button>
+        </section>
+        <section
+          className={`panel pricing-card ${selectedPlan === "Enterprise" ? "pricing-card-selected" : ""}`}
+        >
+          <div className="panel-kicker">Enterprise</div>
+          <h2>$1,499/month</h2>
+          <p>For organizations considering a broader governance rollout.</p>
+          <button
+            className="secondary-button"
+            onClick={() => selectPlan("Enterprise")}
+          >
+            Select locally
+          </button>
+        </section>
+      </div>
+      <p className="muted-note">
+        <AlertTriangle size={14} />{" "}
+        {selectedPlan
+          ? `${selectedPlan} is selected locally. Billing is not connected and no purchase was made.`
+          : "Billing and checkout are not connected; selections stay local to this preview."}
+      </p>
+    </>
+  );
+}
+function SettingsView({
+  dataState,
+  stopped,
+  onEmergencyStop,
+}: {
+  dataState: DataState;
+  stopped: boolean;
+  onEmergencyStop: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Workspace configuration"
+        title="Settings"
+        description="Review connection state and local preview controls."
+      />
+      <div className="settings-layout">
+        <div className="settings-nav">
+          <div className="settings-nav-active">
+            <Settings2 size={16} /> Workspace
+          </div>
+        </div>
+        <div className="settings-content">
+          <section className="panel settings-panel">
+            <div className="panel-header">
+              <div>
+                <div className="panel-kicker">Workspace</div>
+                <h2>
+                  {workspaceId ? "Scoped workspace" : "Workspace not selected"}
+                </h2>
+              </div>
+              <span className="connected-pill">
+                <span className="status-dot" /> {dataState}
+              </span>
+            </div>
+            <SettingRow
+              title="Workspace ID"
+              value={workspaceId ?? "Not configured"}
+            />
+            <SettingRow
+              title="Supabase connection"
+              value={isSupabaseConfigured ? "Configured" : "Not configured"}
+            />
+          </section>
+          <section className="panel settings-panel danger-zone">
+            <div className="panel-header">
+              <div>
+                <div className="panel-kicker">Preview controls</div>
+                <h2>Runtime controls</h2>
+              </div>
+              <Power size={18} className="muted-icon" />
+            </div>
+            <div className="danger-row">
+              <div>
+                <strong>Emergency stop preview</strong>
+                <p>
+                  Changes local UI state only; it does not stop a live runtime.
+                </p>
+              </div>
+              <button
+                className={`stop-button ${stopped ? "resume-button" : ""}`}
+                onClick={onEmergencyStop}
+              >
+                {stopped ? "Resume preview" : "Engage preview"}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+function SettingRow({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{value}</span>
+      </div>
+      <ChevronRight size={16} className="muted-icon" />
+    </div>
+  );
+}
