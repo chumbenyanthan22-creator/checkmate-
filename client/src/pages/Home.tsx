@@ -141,10 +141,6 @@ function StatusPill({ status }: { status: ActivityStatus }) {
   return <span className={`status-pill status-${status}`}><Icon size={13} /> {statusLabel[status]}</span>;
 }
 
-function MetricCard({ label, value, helper, icon: Icon, accent }: { label: string; value: string; helper: string; icon: typeof Activity; accent: string }) {
-  return <div className="metric-card"><div className={`metric-icon icon-${accent}`}><Icon size={18} /></div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-helper"><ArrowUpRight size={13} /> {helper}</div></div>;
-}
-
 function ProgressBar({ value, color = "mint" }: { value: number; color?: string }) { return <div className="progress-track"><div className={`progress-fill fill-${color}`} style={{ width: `${value}%` }} /></div>; }
 
 export default function Home() {
@@ -248,7 +244,7 @@ export default function Home() {
     <main className="main-content">
       <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNavOpen((current) => !current)}><Menu size={20} /></button><div className="breadcrumb"><span>Control center</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === activeView)?.label}</strong></div><div className="topbar-actions"><div className="system-state"><span className="live-dot" /> {dataSource === "supabase" ? "Supabase synced" : "Demo data"}</div><button className="icon-button" aria-label="Notifications"><span className="notification-dot" /><Clock3 size={18} /></button><div className="topbar-divider" /><button className="icon-button" aria-label="Search"><Search size={18} /></button></div></header>
       {emergencyStopped && <div className="emergency-banner"><div><Power size={18} /><strong>Emergency stop engaged</strong><span>All autonomous actions are paused. Review the event stream before resuming.</span></div><button onClick={triggerEmergencyStop}>Resume runtime</button></div>}
-      <div className="content-wrap">
+      <div className={`content-wrap ${activeView === "overview" ? "content-wrap-immersive" : ""} ${emergencyStopped ? "emergency-visible" : ""}`}>
         {activeView === "overview" && <OverviewView metrics={metrics} timeRange={timeRange} setTimeRange={setTimeRange} events={filteredEvents} activityFilter={activityFilter} setActivityFilter={setActivityFilter} agentFilter={agentFilter} setAgentFilter={setAgentFilter} approvals={approvals} onApproval={respondToApproval} onEmergencyStop={triggerEmergencyStop} emergencyStopped={emergencyStopped} onAgentSelect={openAgent} onOpenAudit={() => setView("audit")} onOpenApprovals={() => setView("approvals")} agents={activeAgents} spendTrend={spendTrend} sessionSpend={sessionSpend} />}
         {activeView === "agents" && <AgentsView agents={activeAgents} onSelect={setSelectedAgentId} selectedAgent={selectedAgent} onEmergencyStop={triggerEmergencyStop} emergencyStopped={emergencyStopped} />}
         {activeView === "policies" && <PoliciesView agents={activeAgents} policies={policies} onToggle={togglePolicy} />}
@@ -262,21 +258,50 @@ export default function Home() {
 
 function PageHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) { return <div className="page-header"><div><div className="eyebrow"><span className="eyebrow-line" />{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>; }
 
-function OverviewView({ metrics, timeRange, setTimeRange, events, activityFilter, setActivityFilter, agentFilter, setAgentFilter, approvals, onApproval, onEmergencyStop, emergencyStopped, onAgentSelect, onOpenAudit, onOpenApprovals, agents, spendTrend, sessionSpend }: { metrics: typeof rangeMetrics["24h"]; timeRange: string; setTimeRange: (range: string) => void; events: ActivityEvent[]; activityFilter: "all" | ActivityStatus; setActivityFilter: (filter: "all" | ActivityStatus) => void; agentFilter: string; setAgentFilter: (filter: string) => void; approvals: { id: string; agent: string; action: string; detail: string; risk: RiskLevel; age: string }[]; onApproval: (id: string, action: "approved" | "blocked") => void; onEmergencyStop: () => void; emergencyStopped: boolean; onAgentSelect: (id: string) => void; onOpenAudit: () => void; onOpenApprovals: () => void; agents: Agent[]; spendTrend: SpendPoint[]; sessionSpend: number }) {
-  return <><PageHeader eyebrow="Live protection" title="Good evening, Rohan." description="Your agents are operating within their defined boundaries." action={<div className="header-actions"><div className="select-wrap"><Clock3 size={15} /><select value={timeRange} onChange={(event) => setTimeRange(event.target.value)}><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select><ChevronDown size={15} /></div><button className={`stop-button ${emergencyStopped ? "resume-button" : ""}`} onClick={onEmergencyStop}>{emergencyStopped ? "Resume runtime" : "Emergency stop"}</button></div>} />
-    <Suspense fallback={<section className="panel cp-control-deck cp-control-deck-loading" aria-label="Loading 3D agent control deck"><span className="cp-loading-orbit" />Loading holographic runtime console…</section>}>
-      <AgentCoreScene agents={agents} emergencyStopped={emergencyStopped} onAgentSelect={onAgentSelect} />
+function OverviewView({ metrics, timeRange, setTimeRange, events, activityFilter, setActivityFilter, agentFilter, setAgentFilter, approvals, onApproval, onEmergencyStop, emergencyStopped, onAgentSelect, onOpenAudit, onOpenApprovals, agents, spendTrend, sessionSpend }: {
+  metrics: typeof rangeMetrics["24h"];
+  timeRange: string;
+  setTimeRange: (range: string) => void;
+  events: ActivityEvent[];
+  activityFilter: "all" | ActivityStatus;
+  setActivityFilter: (filter: "all" | ActivityStatus) => void;
+  agentFilter: string;
+  setAgentFilter: (filter: string) => void;
+  approvals: { id: string; agent: string; action: string; detail: string; risk: RiskLevel; age: string }[];
+  onApproval: (id: string, action: "approved" | "blocked") => void;
+  onEmergencyStop: () => void;
+  emergencyStopped: boolean;
+  onAgentSelect: (id: string) => void;
+  onOpenAudit: () => void;
+  onOpenApprovals: () => void;
+  agents: Agent[];
+  spendTrend: SpendPoint[];
+  sessionSpend: number;
+}) {
+  return (
+    <Suspense fallback={<section className="panel cp-control-deck cp-control-deck-loading" aria-label="Loading the 3D runtime dashboard"><span className="cp-loading-orbit" />Loading live 3D runtime core…</section>}>
+      <AgentCoreScene
+        agents={agents}
+        metrics={metrics}
+        timeRange={timeRange}
+        setTimeRange={setTimeRange}
+        events={events}
+        activityFilter={activityFilter}
+        setActivityFilter={setActivityFilter}
+        agentFilter={agentFilter}
+        setAgentFilter={setAgentFilter}
+        approvals={approvals}
+        onApproval={onApproval}
+        onEmergencyStop={onEmergencyStop}
+        emergencyStopped={emergencyStopped}
+        onAgentSelect={onAgentSelect}
+        onOpenAudit={onOpenAudit}
+        onOpenApprovals={onOpenApprovals}
+        spendTrend={spendTrend}
+        sessionSpend={sessionSpend}
+      />
     </Suspense>
-    <div className="metric-grid"><MetricCard label="Protected agents" value={metrics.agents} helper={`${metrics.delta} vs previous period`} icon={Bot} accent="mint" /><MetricCard label="Actions today" value={metrics.actions} helper="99.2% completed safely" icon={Activity} accent="violet" /><MetricCard label="Blocked actions" value={metrics.blocked} helper="4 critical events contained" icon={Shield} accent="coral" /><MetricCard label="Spend tracked" value={sessionSpend ? formatUsd(sessionSpend) : metrics.spend} helper={sessionSpend ? "estimated from tool outputs" : "awaiting live tool logs"} icon={CircleDollarSign} accent="amber" /></div>
-    <div className="dashboard-grid"><section className="panel activity-panel"><div className="panel-header"><div><div className="panel-kicker"><span className="live-dot" /> Live activity</div><h2>Tool actions</h2></div><button className="text-button" onClick={onOpenAudit}>View full trail <ArrowUpRight size={15} /></button></div><div className="filter-row"><div className="segmented-control">{(["all", "allowed", "blocked", "approval"] as const).map((filter) => <button key={filter} className={activityFilter === filter ? "segment-active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "All actions" : statusLabel[filter]}</button>)}</div><div className="select-wrap compact"><Bot size={14} /><select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)}><option value="all">All agents</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><ChevronDown size={14} /></div></div><div className="activity-list">{events.slice(0, 6).map((event) => <button className="activity-row" key={event.id} onClick={() => onAgentSelect(event.agentId)}><div className={`activity-icon activity-${event.status}`}><StatusIcon status={event.status} /></div><div className="activity-main"><div><strong>{event.action}</strong><span className="activity-agent">{event.agent}</span></div><p>{event.detail}</p></div><div className="activity-meta"><span className={`risk-tag ${riskClass[event.risk]}`}>{event.risk}</span><small>{event.time}</small>{event.cost && <small className="activity-cost">{event.cost}</small>}</div><ChevronRight size={15} className="row-chevron" /></button>)}{events.length === 0 && <div className="empty-state"><Eye size={18} />No actions match this filter.</div>}</div></section><section className="panel risk-panel"><div className="panel-header"><div><div className="panel-kicker">Risk posture</div><h2>Action distribution</h2></div><button className="icon-button subtle"><MoreHorizontal size={17} /></button></div><div className="risk-visual"><div className="donut"><div className="donut-core"><strong>18.4k</strong><span>actions</span></div></div><div className="risk-legend"><LegendItem label="Low risk" value="71.2%" color="mint" /><LegendItem label="Medium risk" value="20.4%" color="violet" /><LegendItem label="High risk" value="7.1%" color="amber" /><LegendItem label="Critical" value="1.3%" color="coral" /></div></div><div className="risk-footer"><span><ShieldCheck size={14} /> 98.4% policy coverage</span><span className="risk-footer-link">View policies <ChevronRight size={13} /></span></div></section></div>
-    <SpendingTrend points={spendTrend} total={sessionSpend} />
-    <div className="lower-grid"><section className="panel agents-mini-panel"><div className="panel-header"><div><div className="panel-kicker">Your fleet</div><h2>Protected agents</h2></div><button className="text-button" onClick={() => onAgentSelect("invoice")}>Open registry <ArrowUpRight size={15} /></button></div><div className="agent-mini-list">{agents.map((agent) => { const Icon = agent.icon; return <button key={agent.id} className="agent-mini-row" onClick={() => onAgentSelect(agent.id)}><div className={`agent-avatar agent-${agent.accent}`}><Icon size={18} /></div><div className="agent-mini-copy"><strong>{agent.name}</strong><span>{agent.className} · {agent.calls} calls</span></div><span className={`status-dot status-dot-${agent.status.toLowerCase()}`} /><small>{agent.lastSeen}</small><ChevronRight size={15} /></button>; })}</div></section><ApprovalPanel approvals={approvals} onRespond={onApproval} onOpen={onOpenApprovals} /></div>
-  </>;
-}
-
-function SpendingTrend({ points, total }: { points: SpendPoint[]; total: number }) {
-  const max = Math.max(...points.map((point) => point.total), 0.000001);
-  return <section className="panel spending-panel"><div className="panel-header"><div><div className="panel-kicker"><CircleDollarSign size={13} /> Cost telemetry</div><h2>Daily spend trend</h2></div><strong className="spending-total">{total ? formatUsd(total) : "Awaiting logs"}</strong></div><div className="spending-chart">{points.length ? points.slice(-14).map((point) => <div className="spend-bar-wrap" key={point.day} title={`${point.day}: ${formatUsd(point.total)}`}><div className="spend-bar" style={{ height: `${Math.max(8, point.total / max * 100)}%` }} /><small>{point.day.slice(5)}</small></div>) : <div className="empty-state"><CircleDollarSign size={18} />No cost telemetry yet.</div>}</div></section>;
+  );
 }
 
 function StatusIcon({ status }: { status: ActivityStatus }) { return status === "allowed" ? <Check size={15} /> : status === "blocked" ? <X size={15} /> : <Clock3 size={15} />; }

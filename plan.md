@@ -4,13 +4,13 @@
 AgentBreaker is the AI agent runtime control plane: a live operations surface where teams can inspect the agent fleet, see runtime enforcement in motion, and respond to high-risk actions. Keep the existing registry, policy, approval, audit, settings, cost telemetry, and seeded/Supabase-backed data behavior intact while making the runtime visualization the dashboard's focal point.
 
 ## Design direction
-- **Design movement:** cyberpunk chess-engine incident console, using the supplied holographic chessboard reference as the composition guide while keeping AgentBreaker an operator control plane rather than a game HUD.
-- **Core principles:** live state before decoration; every glow signals a system state; glass surfaces layer the control plane; critical actions stay obvious and auditable.
-- **Color philosophy:** deep black establishes the night-shift control room; neon cyan denotes active telemetry and protected execution; electric purple marks agent activity and orchestration; saturated red is reserved for blocks and emergency conditions.
-- **Layout paradigm:** preserve the product's compact app navigation and place a board-centered operator deck in Overview: agent status and telemetry on the left, an isometric 3D chessboard plus network map in the center, analytics and runtime log on the right, and direct operator controls beneath.
-- **Signature elements:** a real animated holographic chessboard and chess-piece silhouettes built with React Three Fiber + drei + Three.js; translucent cyan/purple glass telemetry cards; an interactive agent-network graph with red emergency-state light.
-- **Interaction philosophy:** selecting a 3D piece or network node updates focused-agent telemetry; Open profile reaches that agent's registry profile; the scene can be paused/resumed, exported, isolated for the local demo, and recalibrated; existing filters, policy switches, approval decisions, time-range control, navigation, and emergency stop remain functional.
-- **Animation:** subtly orbit the board, float and rotate pieces/orbs, and animate the prediction/network traces; keep board geometry readable; red pulses only for blocked/emergency state; honor reduced-motion preference where possible.
+- **Design movement:** high-density cyberpunk telemetry cockpit inspired by the supplied neural-trading dashboard image, reinterpreted as an AI runtime security console rather than a trading product or landing page.
+- **Core principles:** one operational screen; a real 3D live core anchors the layout; dense telemetry remains readable; every glow encodes a meaningful state.
+- **Color philosophy:** deep black keeps the console immersive; cyan signals active execution and trusted routes; electric purple marks orchestration; amber supports neutral analytics; red is reserved for blocked or emergency states.
+- **Layout paradigm:** keep the persistent app navigation and consolidate Overview into one viewport-filling dashboard: KPI strip and runtime controls above, compact status/activity rails around a dominant center 3D neural core, and approvals, spend, and action summaries integrated into the same surface. Do not stack a second marketing/landing section beneath the console.
+- **Signature elements:** a real animated, lobulated two-hemisphere point-cloud AI core with a moving scan field and agent-linked 3D tethers; layered glass HUD cards; compact waveform and risk-distribution graphics.
+- **Interaction philosophy:** selecting an agent updates the core and focused-agent telemetry; Open profile reaches the matching registry record; preserve functional time-range/activity filters, pause/resume, log export, local isolation/recalibration, approval actions, and emergency stop.
+- **Animation:** animate point-cloud rotation, breathing, scan bands, and connected nodes; keep motion subtle and the object immediately legible; freeze the scene on pause or emergency stop and honor reduced-motion preference.
 - **Typography system:** keep the readable existing sans-serif foundation and use compact uppercase, monospaced-feeling telemetry labels; preserve strong contrast and tabular metric emphasis.
 - **Brand essence:** the vigilant runtime boundary that lets teams deploy autonomous agents without surrendering operator control. Personality: precise, vigilant, composed.
 - **Brand voice:** direct and operational. Example lines: “Bounded autonomy. Visible by default.” and “Stop risky actions before they leave the control boundary.”
@@ -20,15 +20,15 @@ AgentBreaker is the AI agent runtime control plane: a live operations surface wh
 ## Implementation
 - Use the repository's existing React/Vite application and keep its existing state/data integrations; do not add a server, database, or external image dependency for this visual change.
 - Make the existing `Home.tsx` dashboard the routed control plane, repairing the current entry import that points at a missing `ControlPlane.tsx`.
-- Add a reusable `AgentCoreScene.tsx` operator deck plus a focused `HolographicChessboard.tsx` component using the installed `@react-three/fiber`, `@react-three/drei`, and `three` packages. The Canvas must render the chessboard, emissive 3D piece geometry, floating orbs, subtle stars, and interactive agent selection; it must not be a static image or CSS-only substitute.
-- Add a focused cyberpunk stylesheet for the glass telemetry rails, chessboard stage, network map, operator command bar, and responsive layout while preserving the existing product interaction surfaces.
+- Rework `AgentCoreScene.tsx` into one viewport-filling operator console and replace `HolographicChessboard.tsx` with a dedicated `NeuralCoreScene.tsx` using the installed `@react-three/fiber`, `@react-three/drei`, and `three` packages. The Canvas must render a moving procedural 3D point-cloud/mesh core, filaments, scan geometry, and agent-linked nodes; it must not be a static image or CSS-only substitute.
+- Add focused cyberpunk styling for a dense single-screen cockpit, glass telemetry rails, the 3D neural stage, inline activity and approval surfaces, operator controls, and responsive layout.
 - Keep the single `/` route and current route manifest. Keep user-facing dashboard data behavior compatible with the current demo/Supabase loading logic.
 
 ## Project structure
 - `client/src/App.tsx`: application route and providers.
 - `client/src/pages/Home.tsx`: existing control-plane shell, data state, and interactive dashboard views.
-- `client/src/components/AgentCoreScene.tsx`: animated Three.js scene and interactive agent nodes.
-- `client/src/components/HolographicChessboard.tsx`: procedural chessboard and animated 3D chess-piece geometry.
+- `client/src/components/AgentCoreScene.tsx`: compact single-screen runtime cockpit, summary telemetry, and operator actions.
+- `client/src/components/NeuralCoreScene.tsx`: procedural React Three Fiber point-cloud core, scan geometry, and live agent-linked 3D nodes.
 - `client/src/cyberpunk.css`: AgentBreaker cyberpunk/glass theme and responsive additions.
 - `client/src/index.css`: existing shared styles and theme tokens.
 - `client/public/manus-routes.json`: root-route manifest.
