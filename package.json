@@ -81,9 +81,6 @@
     "vaul": "^1.1.2",
         "wouter": "^3.3.5",
     "zod": "^4.1.12",
-    "three": "^0.160.0",
-    "@react-three/fiber": "^8.15.0",
-    "@react-three/drei": "^9.92.0"
   },
     
   },
