@@ -1,4 +1,4 @@
-import { OrbitControls, Stars } from "@react-three/drei";
+import { OrbitControls, Stars, Text } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -12,10 +12,14 @@ type NeuralCoreSceneProps = {
   emergencyStopped: boolean;
   isolatedAgentId: string | null;
   onSelectAgent: (id: string) => void;
+  demoMode?: boolean;
 };
 
-const POINTS_PER_HEMISPHERE = 6200;
+type GraphAgent = AgentSignal & { synthetic?: boolean };
+
+const GRAPH_HELPER_ID = "__runtime_supervisor_graph_helper__";
 const NEURAL_UP = new THREE.Vector3(0, 1, 0);
+
 const PARTICLE_VERTEX_SHADER = `
   attribute float aSeed;
   attribute vec3 color;
@@ -26,32 +30,58 @@ const PARTICLE_VERTEX_SHADER = `
   varying float vTwinkle;
 
   void main() {
-    float seed = aSeed;
-    float phase = seed * 31.4159;
-    float shimmer = 0.5 + 0.5 * sin(uTime * (0.9 + fract(seed * 7.13) * 1.1) + phase);
+    float phase = aSeed * 31.4159;
+    float shimmer = 0.5 + 0.5 * sin(uTime * (0.7 + fract(aSeed * 7.13) * 1.2) + phase);
     vec3 jitter = vec3(
-      sin(uTime * 0.73 + phase),
-      cos(uTime * 0.61 + phase * 1.37),
-      sin(uTime * 0.83 + phase * 0.71)
-    ) * (0.015 + fract(seed * 19.17) * 0.02) * uMotion;
+      sin(uTime * 0.49 + phase),
+      cos(uTime * 0.41 + phase * 1.37),
+      sin(uTime * 0.57 + phase * 0.71)
+    ) * (0.01 + fract(aSeed * 19.17) * 0.018) * uMotion;
     vec4 mvPosition = modelViewMatrix * vec4(position + jitter, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    gl_PointSize = uPointSize * (270.0 / max(1.0, -mvPosition.z)) * (0.82 + shimmer * 0.34);
+    gl_PointSize = uPointSize * (270.0 / max(1.0, -mvPosition.z)) * (0.78 + shimmer * 0.38);
     vColor = color;
     vTwinkle = shimmer;
   }
 `;
+
 const PARTICLE_FRAGMENT_SHADER = `
   varying vec3 vColor;
   varying float vTwinkle;
 
   void main() {
-    vec2 centered = gl_PointCoord - vec2(0.5);
-    float distanceFromCenter = length(centered);
+    float distanceFromCenter = length(gl_PointCoord - vec2(0.5));
     if (distanceFromCenter > 0.5) discard;
-    float softness = 1.0 - smoothstep(0.12, 0.5, distanceFromCenter);
-    float shimmer = 0.76 + vTwinkle * 0.38;
-    gl_FragColor = vec4(vColor * shimmer, softness * (0.7 + vTwinkle * 0.3));
+    float softness = 1.0 - smoothstep(0.08, 0.5, distanceFromCenter);
+    float shimmer = 0.72 + vTwinkle * 0.4;
+    gl_FragColor = vec4(vColor * shimmer, softness * (0.55 + vTwinkle * 0.32));
+  }
+`;
+
+const FLOW_VERTEX_SHADER = `
+  attribute float aProgress;
+  varying float vProgress;
+
+  void main() {
+    vProgress = aProgress;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const FLOW_FRAGMENT_SHADER = `
+  uniform vec3 uColor;
+  uniform float uTime;
+  uniform float uOpacity;
+  uniform float uFlow;
+  varying float vProgress;
+
+  void main() {
+    float head = fract(uTime * uFlow);
+    float distanceToHead = abs(vProgress - head);
+    distanceToHead = min(distanceToHead, 1.0 - distanceToHead);
+    float pulse = smoothstep(0.38, 0.0, distanceToHead);
+    float edgeFade = 0.34 + 0.66 * sin(vProgress * 3.14159265);
+    gl_FragColor = vec4(uColor * (0.72 + pulse * 1.8), uOpacity * edgeFade * (0.7 + pulse * 0.3));
   }
 `;
 
@@ -61,6 +91,7 @@ function fract(value: number) {
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
+
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReduced(query.matches);
@@ -68,83 +99,35 @@ function useReducedMotion() {
     query.addEventListener?.("change", update);
     return () => query.removeEventListener?.("change", update);
   }, []);
+
   return reduced;
-}
-
-function makeCoreGeometry(alert: boolean) {
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const seeds: number[] = [];
-  const cyan = new THREE.Color(alert ? "#ff496d" : "#50e9ff");
-  const purple = new THREE.Color(alert ? "#ff496d" : "#aa70ff");
-  const gold = new THREE.Color(alert ? "#ff496d" : "#ffd269");
-
-  for (const side of [-1, 1]) {
-    for (let index = 0; index < POINTS_PER_HEMISPHERE; index += 1) {
-      const vertical = (index + 0.5) / POINTS_PER_HEMISPHERE;
-      const yNorm = 1 - 2 * vertical;
-      const jitter = fract(
-        Math.sin((index + 1) * (side + 4) * 12.9898) * 43758.5453
-      );
-      const jitterY =
-        fract(Math.sin((index + 3) * 78.233 + side * 39.425) * 23421.631) - 0.5;
-      const theta = (jitter - 0.5) * Math.PI + jitterY * 0.055;
-      const ring = Math.sqrt(Math.max(0, 1 - yNorm * yNorm));
-      const latitude = Math.asin(THREE.MathUtils.clamp(yNorm, -1, 1));
-      const folds =
-        1 +
-        Math.sin(theta * 5 + latitude * 4 + side) * 0.12 +
-        Math.cos(theta * 8 - latitude * 7 + side * 0.7) * 0.062 +
-        Math.sin(theta * 15 + latitude * 12) * 0.028;
-      const jaw = 1 - 0.16 * THREE.MathUtils.smoothstep(-yNorm, 0.5, 0.98);
-      const x = side * (0.055 + ring * jaw * folds * 0.74 * Math.cos(theta));
-      const z = ring * folds * Math.sin(theta) * 0.68;
-      const crownRipple =
-        yNorm > 0.68 ? Math.sin(theta * 5 + side) * 0.035 * (yNorm - 0.68) : 0;
-      const y = yNorm * 1.08 + crownRipple;
-      positions.push(x, y, z);
-      seeds.push(
-        fract(Math.sin((index + 1) * 17.17 + side * 41.1) * 43758.5453)
-      );
-
-      let color: THREE.Color;
-      if (yNorm < -0.28) color = purple.clone().lerp(cyan, (yNorm + 1) / 0.72);
-      else if (yNorm > 0.36)
-        color = cyan.clone().lerp(gold, (yNorm - 0.36) / 0.64);
-      else color = (side < 0 ? cyan : purple).clone().lerp(cyan, 0.35);
-      const sparkle =
-        0.78 +
-        0.44 * fract(Math.sin((index + 7) * 91.17 + side * 31.7) * 41321.93);
-      colors.push(color.r * sparkle, color.g * sparkle, color.b * sparkle);
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  geometry.setAttribute("aSeed", new THREE.Float32BufferAttribute(seeds, 1));
-  geometry.computeBoundingSphere();
-  return geometry;
 }
 
 function makeAmbientParticles() {
   const positions: number[] = [];
   const colors: number[] = [];
   const seeds: number[] = [];
-  const base = new THREE.Color("#8299bd");
-  for (let index = 0; index < 240; index += 1) {
+  const cool = new THREE.Color("#4c789f");
+  const violet = new THREE.Color("#655487");
+
+  for (let index = 0; index < 430; index += 1) {
     const seed = index + 1;
     const angle = seed * 2.399963;
-    const height = (((seed * 37) % 101) / 100) * 3.6 - 1.8;
-    const radius = 1.68 + ((seed * 19) % 53) / 100;
-    positions.push(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
-    const intensity = 0.62 + fract(Math.sin(seed * 18.17) * 231.7) * 0.35;
-    colors.push(base.r * intensity, base.g * intensity, base.b * intensity);
+    const radius = 2.35 + ((seed * 19) % 127) / 100;
+    const height = (((seed * 37) % 101) / 100) * 4.6 - 2.3;
+    positions.push(
+      Math.cos(angle) * radius,
+      height,
+      Math.sin(angle) * radius * 0.74
+    );
+    const tint = cool
+      .clone()
+      .lerp(violet, fract(Math.sin(seed * 12.17) * 214.7));
+    const intensity = 0.5 + fract(Math.sin(seed * 18.17) * 231.7) * 0.48;
+    colors.push(tint.r * intensity, tint.g * intensity, tint.b * intensity);
     seeds.push(fract(Math.sin(seed * 43.11) * 8921.17));
   }
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     "position",
@@ -167,7 +150,8 @@ function AnimatedParticles({
   reducedMotion: boolean;
   pointSize: number;
 }) {
-  const material = useRef<THREE.ShaderMaterial>(null!);
+  const material = useRef<THREE.ShaderMaterial>(null);
+
   useFrame(state => {
     if (!material.current) return;
     material.current.uniforms.uTime.value = motionEnabled
@@ -175,10 +159,11 @@ function AnimatedParticles({
       : 0;
     material.current.uniforms.uMotion.value = motionEnabled
       ? reducedMotion
-        ? 0.22
+        ? 0.16
         : 1
       : 0;
   });
+
   return (
     <points geometry={geometry}>
       <shaderMaterial
@@ -199,116 +184,398 @@ function AnimatedParticles({
   );
 }
 
+function isCritical(agent: GraphAgent, emergencyStopped: boolean) {
+  if (emergencyStopped) return true;
+  if (agent.synthetic) return false;
+  return /loop|critical|danger|error|fail|blocked|high/i.test(agent.risk ?? "");
+}
+
 function AgentNode({
   agent,
-  index,
-  count,
+  initialPosition,
+  nodeRef,
   selected,
-  running,
   emergencyStopped,
   isolated,
   isolationActive,
-  reducedMotion,
   onSelect,
 }: {
-  agent: AgentSignal;
-  index: number;
-  count: number;
+  agent: GraphAgent;
+  initialPosition: THREE.Vector3;
+  nodeRef: (node: THREE.Group | null) => void;
   selected: boolean;
-  running: boolean;
   emergencyStopped: boolean;
   isolated: boolean;
   isolationActive: boolean;
-  reducedMotion: boolean;
   onSelect: (id: string) => void;
 }) {
-  const group = useRef<THREE.Group>(null!);
-  const tether = useRef<THREE.Mesh>(null!);
-  const direction = useMemo(() => new THREE.Vector3(), []);
-  const baseAngle = (index / Math.max(3, count)) * Math.PI * 2;
-  const color =
-    emergencyStopped || isolated
-      ? "#ff496d"
-      : index % 2 === 0
-        ? "#5cecff"
-        : "#b579ff";
-  const opacity = isolationActive && !isolated ? 0.24 : 0.94;
-
-  useFrame((state, delta) => {
-    const motionActive = running && !emergencyStopped;
-    const motionScale = reducedMotion ? 0.24 : 1;
-    const time = motionActive ? state.clock.elapsedTime : 0;
-    const angle = baseAngle + time * 0.38 * motionScale;
-    const x = Math.sin(angle) * 1.76;
-    const y = motionActive
-      ? Math.sin(time * 0.82 * motionScale + index) * 0.76 * motionScale
-      : 0;
-    const z = Math.cos(angle) * 1.34;
-    group.current.position.set(x, y, z);
-    if (motionActive) group.current.rotation.y += delta * 0.75 * motionScale;
-
-    direction.set(x, y, z);
-    const distance = direction.length();
-    tether.current.position.copy(direction).multiplyScalar(0.5);
-    tether.current.quaternion.setFromUnitVectors(
-      NEURAL_UP,
-      direction.normalize()
-    );
-    tether.current.scale.set(1, distance, 1);
-  });
+  const critical = isCritical(agent, emergencyStopped);
+  const color = critical ? "#ff4f71" : "#48e7ff";
+  const opacity = emergencyStopped
+    ? 0.58
+    : isolationActive && !isolated
+      ? 0.16
+      : agent.synthetic
+        ? 0.74
+        : 0.96;
+  const hit = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    if (!agent.synthetic) onSelect(agent.id);
+  };
 
   return (
-    <>
-      <mesh ref={tether}>
-        <cylinderGeometry args={[0.0035, 0.0035, 1, 5]} />
+    <group ref={nodeRef} position={initialPosition.toArray()}>
+      <mesh onClick={hit}>
+        <sphereGeometry args={[selected ? 0.17 : 0.14, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={selected ? 3.8 : critical ? 3 : 2.4}
+          metalness={0.2}
+          roughness={0.16}
+          transparent
+          opacity={opacity}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh scale={selected ? 1.45 : 1.22}>
+        <sphereGeometry args={[0.14, 12, 12]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={opacity * 0.28}
+          opacity={opacity * (selected ? 0.2 : 0.1)}
           depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
       </mesh>
-      <group
-        ref={group}
-        position={[Math.sin(baseAngle) * 1.76, 0, Math.cos(baseAngle) * 1.34]}
-      >
-        <mesh
-          onClick={event => {
-            event.stopPropagation();
-            onSelect(agent.id);
-          }}
+      <mesh rotation={[Math.PI / 2, 0, 0]} onClick={hit}>
+        <torusGeometry args={[selected ? 0.245 : 0.205, 0.008, 8, 40]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={opacity * 0.78}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh rotation={[0.35, 0.7, 0]} scale={0.78}>
+        <torusGeometry args={[selected ? 0.26 : 0.22, 0.0045, 6, 36]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={opacity * 0.34}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+      {selected && !emergencyStopped && (
+        <pointLight color={color} intensity={1.1} distance={1.8} />
+      )}
+      {agent.synthetic && (
+        <Text
+          position={[0, 0.34, 0]}
+          fontSize={0.082}
+          lineHeight={1.15}
+          color="#b9f5ff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.006}
+          outlineColor="#071018"
         >
-          <icosahedronGeometry args={[selected ? 0.082 : 0.057, 1]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={selected ? 2.2 : 1.15}
-            metalness={0.15}
-            roughness={0.14}
-            transparent
-            opacity={opacity}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh
-          rotation={[Math.PI / 2, 0, 0]}
-          onClick={event => {
-            event.stopPropagation();
-            onSelect(agent.id);
-          }}
+          EXTERNAL DEMO AGENT{`\n`}GRAPH-ONLY · NOT PROTECTED
+        </Text>
+      )}
+      {!agent.synthetic && (
+        <Text
+          position={[0, -0.24, 0]}
+          fontSize={0.082}
+          maxWidth={0.95}
+          textAlign="center"
+          color={critical ? "#ff9baa" : "#a8f4ff"}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.006}
+          outlineColor="#071018"
         >
-          <torusGeometry args={[selected ? 0.128 : 0.092, 0.005, 6, 40]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={opacity * 0.65}
+          {agent.name}
+        </Text>
+      )}
+    </group>
+  );
+}
+
+function FlowLink({
+  from,
+  to,
+  color,
+  motionEnabled,
+  reducedMotion,
+  index,
+}: {
+  from: React.MutableRefObject<THREE.Group | null>;
+  to: React.MutableRefObject<THREE.Group | null>;
+  color: string;
+  motionEnabled: boolean;
+  reducedMotion: boolean;
+  index: number;
+}) {
+  const geometry = useMemo(() => {
+    const line = new THREE.BufferGeometry();
+    line.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(new Float32Array(6), 3)
+    );
+    line.setAttribute("aProgress", new THREE.Float32BufferAttribute([0, 1], 1));
+    return line;
+  }, []);
+  const material = useRef<THREE.ShaderMaterial>(null);
+  const lineColor = useMemo(() => new THREE.Color(color), [color]);
+
+  useFrame(state => {
+    const start = from.current;
+    const end = to.current;
+    if (!start || !end) return;
+    const position = geometry.getAttribute("position") as THREE.BufferAttribute;
+    position.setXYZ(0, start.position.x, start.position.y, start.position.z);
+    position.setXYZ(1, end.position.x, end.position.y, end.position.z);
+    position.needsUpdate = true;
+    if (material.current) {
+      material.current.uniforms.uTime.value = motionEnabled
+        ? state.clock.elapsedTime
+        : 0;
+      material.current.uniforms.uFlow.value = reducedMotion
+        ? 0.2
+        : 0.75 + (index % 3) * 0.16;
+    }
+  });
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <lineSegments geometry={geometry} renderOrder={-1}>
+      <shaderMaterial
+        ref={material}
+        vertexShader={FLOW_VERTEX_SHADER}
+        fragmentShader={FLOW_FRAGMENT_SHADER}
+        uniforms={{
+          uColor: { value: lineColor },
+          uTime: { value: 0 },
+          uOpacity: { value: color === "#ff4f71" ? 0.55 : 0.42 },
+          uFlow: { value: 0.75 },
+        }}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        toneMapped={false}
+      />
+    </lineSegments>
+  );
+}
+
+function EnergyOrb({
+  position,
+  color,
+  motionEnabled,
+  reducedMotion,
+  phase,
+}: {
+  position: [number, number, number];
+  color: string;
+  motionEnabled: boolean;
+  reducedMotion: boolean;
+  phase: number;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const base = useMemo(() => new THREE.Vector3(...position), [position]);
+
+  useFrame(state => {
+    if (!group.current || !motionEnabled) return;
+    const scale = reducedMotion ? 0.18 : 1;
+    const time = state.clock.elapsedTime * scale + phase;
+    group.current.position.set(
+      base.x + Math.sin(time * 0.62) * 0.12,
+      base.y + Math.cos(time * 0.48) * 0.16,
+      base.z + Math.sin(time * 0.39) * 0.1
+    );
+    group.current.rotation.y += state.clock.getDelta() * 0.12 * scale;
+  });
+
+  return (
+    <group ref={group} position={position}>
+      <mesh>
+        <sphereGeometry args={[0.24, 16, 16]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.07}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.2, 0.008, 8, 28]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.24}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function NetworkGraph({
+  graphAgents,
+  selectedId,
+  running,
+  emergencyStopped,
+  isolatedAgentId,
+  reducedMotion,
+  onSelectAgent,
+}: {
+  graphAgents: GraphAgent[];
+  selectedId: string;
+  running: boolean;
+  emergencyStopped: boolean;
+  isolatedAgentId: string | null;
+  reducedMotion: boolean;
+  onSelectAgent: (id: string) => void;
+}) {
+  const nodeRefs = useRef<Array<THREE.Group | null>>([]);
+  const nodeHandles = useMemo<
+    Array<React.MutableRefObject<THREE.Group | null>>
+  >(() => graphAgents.map(() => ({ current: null })), [graphAgents.length]);
+  const motionEnabled = running && !emergencyStopped;
+  const states = useMemo(
+    () =>
+      graphAgents.map((_, index) => {
+        const angle =
+          (index / Math.max(1, graphAgents.length)) * Math.PI * 2 - Math.PI / 2;
+        const radius = 1.92 + (index % 3) * 0.14;
+        const x = Math.cos(angle) * radius;
+        const y =
+          Math.sin(angle) * radius * 0.58 + Math.sin(index * 1.91) * 0.14;
+        const z = Math.sin(angle) * radius * 0.34;
+        return {
+          position: new THREE.Vector3(x, y, z),
+          home: new THREE.Vector3(x, y, z),
+          velocity: new THREE.Vector3(),
+          phase: index * 1.37,
+        };
+      }),
+    [graphAgents.length]
+  );
+  const edges = useMemo(() => {
+    const result: Array<[number, number]> = [];
+    const count = graphAgents.length;
+    if (count < 2) return result;
+    for (let index = 0; index < count; index += 1) {
+      result.push([index, (index + 1) % count]);
+      if (index % 2 === 0 && count > 4)
+        result.push([index, (index + 2) % count]);
+    }
+    return result;
+  }, [graphAgents.length]);
+
+  useFrame(state => {
+    if (!motionEnabled) {
+      states.forEach(item => item.velocity.set(0, 0, 0));
+    } else {
+      const speed = reducedMotion ? 0.18 : 1;
+      const forces = states.map(() => new THREE.Vector3());
+      const difference = new THREE.Vector3();
+
+      for (let index = 0; index < states.length; index += 1) {
+        const current = states[index];
+        forces[index].add(
+          current.home.clone().sub(current.position).multiplyScalar(0.52)
+        );
+        forces[index].add(
+          new THREE.Vector3(
+            Math.sin(state.clock.elapsedTime * 0.55 + current.phase),
+            Math.cos(state.clock.elapsedTime * 0.43 + current.phase * 1.4),
+            Math.sin(state.clock.elapsedTime * 0.67 + current.phase * 0.7)
+          ).multiplyScalar(0.025 * speed)
+        );
+
+        for (let other = index + 1; other < states.length; other += 1) {
+          difference.subVectors(current.position, states[other].position);
+          const distanceSquared = Math.max(0.18, difference.lengthSq());
+          forces[index].add(
+            difference.normalize().multiplyScalar(0.022 / distanceSquared)
+          );
+          forces[other].add(
+            difference.normalize().multiplyScalar(-0.022 / distanceSquared)
+          );
+        }
+      }
+
+      edges.forEach(([a, b]) => {
+        difference.subVectors(states[b].position, states[a].position);
+        const distance = Math.max(0.001, difference.length());
+        const spring = difference
+          .normalize()
+          .multiplyScalar((distance - 1.8) * 0.075);
+        forces[a].add(spring);
+        forces[b].sub(spring);
+      });
+
+      states.forEach((item, index) => {
+        item.velocity.add(forces[index].multiplyScalar(speed * 0.42));
+        item.velocity.multiplyScalar(reducedMotion ? 0.82 : 0.91);
+        item.position.add(item.velocity);
+        const length = item.position.length();
+        if (length > 2.85) item.position.multiplyScalar(2.85 / length);
+      });
+    }
+
+    states.forEach((item, index) => {
+      const node = nodeRefs.current[index];
+      if (node) node.position.copy(item.position);
+    });
+  });
+
+  return (
+    <group>
+      {edges.map(([fromIndex, toIndex], index) => {
+        const fromCritical = isCritical(
+          graphAgents[fromIndex],
+          emergencyStopped
+        );
+        const toCritical = isCritical(graphAgents[toIndex], emergencyStopped);
+        return (
+          <FlowLink
+            key={`${fromIndex}-${toIndex}`}
+            from={nodeHandles[fromIndex]}
+            to={nodeHandles[toIndex]}
+            color={fromCritical || toCritical ? "#ff4f71" : "#48e7ff"}
+            motionEnabled={motionEnabled}
+            reducedMotion={reducedMotion}
+            index={index}
           />
-        </mesh>
-        {selected && (
-          <pointLight color={color} intensity={0.8} distance={1.4} />
-        )}
-      </group>
-    </>
+        );
+      })}
+      {graphAgents.map((agent, index) => (
+        <AgentNode
+          key={agent.id}
+          agent={agent}
+          initialPosition={states[index].position}
+          nodeRef={node => {
+            nodeRefs.current[index] = node;
+            nodeHandles[index].current = node;
+          }}
+          selected={agent.id === selectedId}
+          emergencyStopped={emergencyStopped}
+          isolated={agent.id === isolatedAgentId}
+          isolationActive={Boolean(isolatedAgentId)}
+          onSelect={onSelectAgent}
+        />
+      ))}
+    </group>
   );
 }
 
@@ -319,143 +586,129 @@ export default function NeuralCoreScene({
   emergencyStopped,
   isolatedAgentId,
   onSelectAgent,
+  demoMode = false,
 }: NeuralCoreSceneProps) {
-  const core = useRef<THREE.Group>(null!);
-  const scanBand = useRef<THREE.Mesh>(null!);
-  const pointGeometry = useMemo(
-    () => makeCoreGeometry(emergencyStopped),
-    [emergencyStopped]
-  );
-  const ambientGeometry = useMemo(makeAmbientParticles, []);
   const reducedMotion = useReducedMotion();
   const motionEnabled = running && !emergencyStopped;
-  const motionScale = reducedMotion ? 0.24 : 1;
+  const ambientGeometry = useMemo(makeAmbientParticles, []);
+  const graphAgents = useMemo<GraphAgent[]>(() => {
+    const visibleAgents = agents.slice(0, 8);
+    if (demoMode && visibleAgents.length < 6) {
+      return [
+        ...visibleAgents,
+        {
+          id: GRAPH_HELPER_ID,
+          name: "External Demo Agent",
+          synthetic: true,
+          risk: "graph-only helper",
+        },
+      ];
+    }
+    return visibleAgents;
+  }, [agents, demoMode]);
+  const syntheticCount = graphAgents.filter(agent => agent.synthetic).length;
+  const liveCount = graphAgents.length - syntheticCount;
+  const summary = `${liveCount} ${demoMode ? "DEMO" : "SCOPED"} AGENT${liveCount === 1 ? "" : "S"} • ${
+    syntheticCount
+      ? `${syntheticCount} SYNTHETIC GRAPH HELPER${syntheticCount === 1 ? "" : "S"}`
+      : "NO SYNTHETIC NODES"
+  }`;
 
-  useEffect(
-    () => () => {
-      pointGeometry.dispose();
-      ambientGeometry.dispose();
-    },
-    [ambientGeometry, pointGeometry]
-  );
-
-  useFrame((state, delta) => {
-    if (!motionEnabled) return;
-    const time = state.clock.elapsedTime;
-    core.current.rotation.y += delta * 0.3 * motionScale;
-    core.current.rotation.x =
-      Math.sin(time * 0.34 * motionScale) * 0.12 * motionScale;
-    core.current.rotation.z =
-      Math.sin(time * 0.24 * motionScale) * 0.075 * motionScale;
-    core.current.position.y =
-      Math.sin(time * 0.95 * motionScale) * 0.12 * motionScale;
-    core.current.scale.setScalar(
-      1 + Math.sin(time * 1.2 * motionScale) * 0.035 * motionScale
-    );
-    scanBand.current.position.y = Math.sin(time * 1.4 * motionScale) * 0.88;
-    scanBand.current.rotation.z = time * 0.7 * motionScale;
-  });
+  useEffect(() => () => ambientGeometry.dispose(), [ambientGeometry]);
 
   return (
     <>
-      <color attach="background" args={["#05060b"]} />
-      <fog attach="fog" args={["#05060b", 8, 17]} />
-      <ambientLight intensity={0.64} />
-      <hemisphereLight args={["#a5edff", "#171126", 1.15]} />
+      <color attach="background" args={["#03070d"]} />
+      <fog attach="fog" args={["#03070d", 7, 14]} />
+      <ambientLight intensity={0.42} />
+      <hemisphereLight args={["#93ecff", "#100c1d", 0.9]} />
       <pointLight
-        position={[0, 2.6, 3.1]}
-        color={emergencyStopped ? "#ff496d" : "#58eaff"}
-        intensity={13}
+        position={[0, 2.8, 2.4]}
+        color={emergencyStopped ? "#ff4f71" : "#49e7ff"}
+        intensity={8}
         distance={8}
       />
       <pointLight
-        position={[-2.8, -0.7, -2.4]}
-        color={emergencyStopped ? "#ff496d" : "#a879ff"}
-        intensity={10}
+        position={[-2.4, -1.4, -2]}
+        color="#7358cb"
+        intensity={5}
         distance={7}
       />
       <pointLight
-        position={[2.9, 1.6, -1.5]}
-        color={emergencyStopped ? "#ff496d" : "#ffd26a"}
-        intensity={5}
+        position={[2.8, 1.2, -1.6]}
+        color="#5adfff"
+        intensity={3.5}
         distance={6}
       />
       <Stars
-        radius={18}
-        depth={7}
-        count={360}
-        factor={1.8}
-        saturation={0.65}
+        radius={16}
+        depth={8}
+        count={320}
+        factor={1.55}
+        saturation={0.8}
         fade
-        speed={motionEnabled ? (reducedMotion ? 0.06 : 0.45) : 0}
+        speed={motionEnabled ? (reducedMotion ? 0.04 : 0.22) : 0}
       />
       <AnimatedParticles
         geometry={ambientGeometry}
         motionEnabled={motionEnabled}
         reducedMotion={reducedMotion}
-        pointSize={0.024}
+        pointSize={0.021}
       />
-      <group ref={core}>
-        <AnimatedParticles
-          geometry={pointGeometry}
-          motionEnabled={motionEnabled}
-          reducedMotion={reducedMotion}
-          pointSize={0.038}
-        />
-        <mesh ref={scanBand} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.05, 0.004, 5, 100]} />
-          <meshBasicMaterial
-            color={emergencyStopped ? "#ff496d" : "#c5f8ff"}
-            transparent
-            opacity={0.26}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh rotation={[0.34, 0.2, 0]}>
-          <torusGeometry args={[1.48, 0.004, 5, 100]} />
-          <meshBasicMaterial
-            color={emergencyStopped ? "#ff496d" : "#a777ff"}
-            transparent
-            opacity={0.13}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0]}>
-          <icosahedronGeometry args={[0.055, 1]} />
-          <meshStandardMaterial
-            color={emergencyStopped ? "#ff496d" : "#a9f8ff"}
-            emissive={emergencyStopped ? "#ff496d" : "#58deff"}
-            emissiveIntensity={1.2}
-            metalness={0.3}
-            roughness={0.25}
-            toneMapped={false}
-          />
-        </mesh>
-        {agents.map((agent, index) => (
-          <AgentNode
-            key={agent.id}
-            agent={agent}
-            index={index}
-            count={agents.length}
-            selected={agent.id === selectedId}
-            running={motionEnabled}
-            emergencyStopped={emergencyStopped}
-            isolated={agent.id === isolatedAgentId}
-            isolationActive={Boolean(isolatedAgentId)}
-            reducedMotion={reducedMotion}
-            onSelect={onSelectAgent}
-          />
-        ))}
-      </group>
+      <Text
+        position={[0, 2.25, 0]}
+        fontSize={0.09}
+        color={emergencyStopped ? "#ff7890" : "#9defff"}
+        anchorX="center"
+        anchorY="middle"
+        letterSpacing={0.08}
+        outlineWidth={0.008}
+        outlineColor="#03070d"
+      >
+        {summary}
+      </Text>
+      <NetworkGraph
+        graphAgents={graphAgents}
+        selectedId={selectedId}
+        running={running}
+        emergencyStopped={emergencyStopped}
+        isolatedAgentId={isolatedAgentId}
+        reducedMotion={reducedMotion}
+        onSelectAgent={onSelectAgent}
+      />
+      <EnergyOrb
+        position={[-1.9, 1.18, -0.8]}
+        color={emergencyStopped ? "#ff4f71" : "#45e7ff"}
+        motionEnabled={motionEnabled}
+        reducedMotion={reducedMotion}
+        phase={0.2}
+      />
+      <EnergyOrb
+        position={[1.92, -0.88, -0.65]}
+        color={emergencyStopped ? "#ff4f71" : "#9872ff"}
+        motionEnabled={motionEnabled}
+        reducedMotion={reducedMotion}
+        phase={1.8}
+      />
+      <EnergyOrb
+        position={[0.25, 1.55, 1.35]}
+        color={emergencyStopped ? "#ff4f71" : "#ffd16e"}
+        motionEnabled={motionEnabled}
+        reducedMotion={reducedMotion}
+        phase={3.1}
+      />
       <OrbitControls
         target={[0, 0, 0]}
         enablePan={false}
-        enableZoom={false}
+        enableZoom
+        minDistance={4.2}
+        maxDistance={9}
         enableDamping
         dampingFactor={0.08}
         autoRotate={motionEnabled}
-        autoRotateSpeed={reducedMotion ? 0.18 : 0.85}
-        minPolarAngle={Math.PI * 0.3}
-        maxPolarAngle={Math.PI * 0.7}
+        autoRotateSpeed={reducedMotion ? 0.16 : 0.42}
+        minPolarAngle={Math.PI * 0.24}
+        maxPolarAngle={Math.PI * 0.76}
       />
     </>
   );
