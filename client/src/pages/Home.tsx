@@ -170,13 +170,15 @@ export default function Home() {
   useEffect(() => {
     let mounted = true;
     const loadLiveWorkspace = async () => {
+      const client = supabase;
+      if (!mounted || !client) return;
       const [agentsResult, policiesResult, approvalsResult, auditResult, alertsResult, toolLogsResult] = await Promise.all([
-        supabase.from("agents").select("id,slug,name,description,status,agent_class,risk_level,budget_cents,tool_calls,last_seen_at").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
-        supabase.from("policies").select("id,title,description,scope,enabled").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
-        supabase.from("approvals").select("id,reference,action,detail,risk_level,requested_at,agent_id,agents(name,slug)").eq("workspace_id", DEMO_WORKSPACE_ID).eq("status", "pending").order("requested_at"),
-        supabase.from("audit_events").select("id,agent_id,agent_name,action,detail,outcome,risk_level,created_at,agents(slug)").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at", { ascending: false }).limit(12),
-        supabase.from("agent_alerts").select("id,session_id,alert_type,fingerprint,cycle_length,created_at").order("created_at", { ascending: false }).limit(8),
-        supabase.from("tool_execution_logs").select("session_id,agent_id,tool_name,cost_incurred,output_tokens_estimated,model_name,executed_at").order("executed_at", { ascending: false }).limit(1000),
+        client.from("agents").select("id,slug,name,description,status,agent_class,risk_level,budget_cents,tool_calls,last_seen_at").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
+        client.from("policies").select("id,title,description,scope,enabled").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at"),
+        client.from("approvals").select("id,reference,action,detail,risk_level,requested_at,agent_id,agents(name,slug)").eq("workspace_id", DEMO_WORKSPACE_ID).eq("status", "pending").order("requested_at"),
+        client.from("audit_events").select("id,agent_id,agent_name,action,detail,outcome,risk_level,created_at,agents(slug)").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at", { ascending: false }).limit(12),
+        client.from("agent_alerts").select("id,session_id,alert_type,fingerprint,cycle_length,created_at").order("created_at", { ascending: false }).limit(8),
+        client.from("tool_execution_logs").select("session_id,agent_id,tool_name,cost_incurred,output_tokens_estimated,model_name,executed_at").order("executed_at", { ascending: false }).limit(1000),
       ]);
       if (!mounted || agentsResult.error || policiesResult.error || approvalsResult.error || auditResult.error || alertsResult.error || toolLogsResult.error) return;
       const liveAgents = (agentsResult.data ?? []).map((row) => ({
