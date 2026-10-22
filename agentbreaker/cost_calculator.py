@@ -21,7 +21,7 @@ class CostCalculator:
 
     @classmethod
     def from_config_file(cls, path: str | Path | None = None, supabase_client: Any | None = None) -> "CostCalculator":
-        config_path = Path(path or os.getenv("AGENTBREAKER_PRICING_CONFIG", DEFAULT_PRICING_PATH))
+        config_path = Path(path or os.getenv("SOVEREIGNHALT_PRICING_CONFIG") or os.getenv("AGENTBREAKER_PRICING_CONFIG") or DEFAULT_PRICING_PATH)
         with config_path.open(encoding="utf-8") as stream:
             return cls(json.load(stream), supabase_client=supabase_client)
 

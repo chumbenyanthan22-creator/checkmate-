@@ -10,7 +10,7 @@ cd checkmate-
 pip install -e .
 ```
 
-Python 3.11+. The local scenarios below use no API key or external service.
+Python 3.11+. The local scenarios below use no API key or external service. The installable package and recommended import namespace are `sovereignhalt`; the existing `agentbreaker` imports remain available for backward compatibility.
 
 ## 2. Run local guard scenarios
 
@@ -40,7 +40,7 @@ SOVEREIGNHALT_AGENT_SLUG=<stable-agent-slug>
 Enable telemetry explicitly in the callback used by that agent:
 
 ```python
-from agentbreaker import CheckmateHandler
+from sovereignhalt import CheckmateHandler
 
 handler = CheckmateHandler(
     session_id="<runtime-session-id>",
@@ -63,7 +63,7 @@ The Vercel entrypoints are the two TypeScript wrappers in `api/telemetry/`; Verc
 ## 3. LangChain integration
 
 ```python
-from agentbreaker import CheckmateHandler
+from sovereignhalt import CheckmateHandler
 
 handler = CheckmateHandler(session_id="pilot", loop_threshold=3, max_iterations=8)
 

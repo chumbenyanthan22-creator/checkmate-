@@ -2,15 +2,17 @@
 
 Set `SLACK_WEBHOOK_URL` in the backend environment. The `SupabaseLogger` accepts a `SlackAlerter` and schedules the Block Kit POST on a daemon thread so detector enforcement never waits on Slack.
 
-For a public interactivity endpoint, also set `SLACK_SIGNING_SECRET`. The endpoint verifies Slack's timestamped HMAC signature before parsing the form. If no Continue/Kill response arrives, `AGENTBREAKER_SLACK_TIMEOUT_SECONDS` (default: 60) pauses the session as the safe default.
+For a public interactivity endpoint, also set `SLACK_SIGNING_SECRET`. The endpoint verifies Slack's timestamped HMAC signature before parsing the form. If no Continue/Kill response arrives, `SOVEREIGNHALT_SLACK_TIMEOUT_SECONDS` (default: 60) pauses the session as the safe default. The former `AGENTBREAKER_SLACK_TIMEOUT_SECONDS` variable remains a fallback for existing installations.
 
 ## Local run
+
+Install the optional webhook dependencies with `pip install -e ".[web]"` before starting the ASGI app.
 
 ```sh
 python examples/slack_scenario.py
 # Explicitly opt in only when you want to send a real alert:
 SOVEREIGNHALT_SEND_SLACK_SCENARIO=1 python examples/slack_scenario.py
-uvicorn agentbreaker.slack_webhook_handler:app --host 0.0.0.0 --port 8000
+uvicorn sovereignhalt.slack_webhook_handler:app --host 0.0.0.0 --port 8000
 ```
 
 The scenario runs in dry-run mode by default and never sends a Slack message unless the opt-in variable is set.

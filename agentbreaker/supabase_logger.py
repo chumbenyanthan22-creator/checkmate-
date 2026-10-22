@@ -59,7 +59,7 @@ class SupabaseLogger:
             return False
         return isinstance(claims, dict) and claims.get("role") == "service_role"
 
-    def __init__(self, client: SupabaseLike | None = None, outbox_path: str | Path = ".agentbreaker-outbox.jsonl", slack_alerter: "SlackAlerter | None" = None, cost_calculator: CostCalculator | None = None, agent_name: str | None = None, agent_slug: str | None = None, agent_id: str | None = None) -> None:
+    def __init__(self, client: SupabaseLike | None = None, outbox_path: str | Path = ".sovereignhalt-outbox.jsonl", slack_alerter: "SlackAlerter | None" = None, cost_calculator: CostCalculator | None = None, agent_name: str | None = None, agent_slug: str | None = None, agent_id: str | None = None) -> None:
         if client is None:
             from dotenv import load_dotenv
             load_dotenv()

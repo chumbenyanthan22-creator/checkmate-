@@ -6,7 +6,7 @@ no-progress loops, and verify that the chosen threshold blocks only the latter.
 """
 from __future__ import annotations
 
-from agentbreaker import LoopDetector, ToolCall
+from sovereignhalt import LoopDetector, ToolCall
 
 
 def replay(agent_id: str, calls: list[tuple[str, dict[str, str]]], threshold: int) -> list[str]:

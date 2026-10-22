@@ -6,9 +6,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from langchain_core.tools import StructuredTool
 
-from agentbreaker.langchain_handler import LoopBreakerHandler, LoopDetectedException
-from agentbreaker.slack_alerter import SlackAlerter
-from agentbreaker.supabase_logger import SupabaseLogger
+from sovereignhalt import LoopBreakerHandler, LoopDetectedException, SlackAlerter, SupabaseLogger
 
 load_dotenv()
 session_id = os.getenv("SESSION_ID", str(uuid4()))

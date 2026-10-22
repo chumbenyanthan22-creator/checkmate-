@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel", "build"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentbreaker"
+name = "sovereignhalt"
 version = "0.1.0"
-description = "Loop detection and cost tracking for LangChain agents"
+description = "SovereignHalt loop protection and runtime observability for LangChain agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{name = "AgentBreaker contributors"}]
+authors = [{name = "SovereignHalt contributors"}]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -30,11 +30,11 @@ web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0", "python-multipart>=0.0.9
 test = ["pytest>=8.0", "httpx>=0.27.0", "fastapi>=0.115.0", "python-multipart>=0.0.9"]
 
 [project.urls]
-Homepage = "https://github.com/chumbenyanthan22-creator/Curcuit-Agent-breaker-"
-Repository = "https://github.com/chumbenyanthan22-creator/Curcuit-Agent-breaker-.git"
+Homepage = "https://github.com/chumbenyanthan22-creator/checkmate-"
+Repository = "https://github.com/chumbenyanthan22-creator/checkmate-.git"
 
 [tool.setuptools.packages.find]
-include = ["agentbreaker"]
+include = ["agentbreaker*", "sovereignhalt*"]
 
 [tool.setuptools.package-data]
 agentbreaker = ["pricing_config.json"]

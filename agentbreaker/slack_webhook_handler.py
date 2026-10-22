@@ -22,7 +22,7 @@ class SessionControl:
     timeout_timer: threading.Timer | None = None
 
 
-app = FastAPI(title="AgentBreaker Slack webhook")
+app = FastAPI(title="SovereignHalt Slack webhook")
 _sessions: dict[str, SessionControl] = {}
 
 
@@ -44,7 +44,7 @@ def mark_loop_alert(session_id: str, timeout_seconds: float | None = None) -> No
     if control is None:
         return
     _cancel_timeout(session_id)
-    seconds = float(timeout_seconds if timeout_seconds is not None else os.getenv("AGENTBREAKER_SLACK_TIMEOUT_SECONDS", "60"))
+    seconds = float(timeout_seconds if timeout_seconds is not None else os.getenv("SOVEREIGNHALT_SLACK_TIMEOUT_SECONDS", os.getenv("AGENTBREAKER_SLACK_TIMEOUT_SECONDS", "60")))
     control.timeout_timer = threading.Timer(seconds, _timeout_session, args=(session_id,))
     control.timeout_timer.daemon = True
     control.timeout_timer.start()
@@ -107,15 +107,15 @@ async def slack_button(request: Request) -> dict[str, str]:
     control = _sessions.get(session_id)
     if not session_id or control is None:
         raise HTTPException(status_code=404, detail="Unknown or expired session")
-    if action_id == "agentbreaker_continue":
+    if action_id in {"sovereignhalt_continue", "agentbreaker_continue"}:
         _cancel_timeout(session_id)
         control.detector.reset(session_id)
         resume = getattr(control.logger, "resume_session", None)
         if resume is not None:
             resume(session_id)
-        return {"text": f"AgentBreaker detector reset for session {session_id}. Continue approved."}
-    if action_id == "agentbreaker_kill":
+        return {"text": f"SovereignHalt detector reset for session {session_id}. Continue approved."}
+    if action_id in {"sovereignhalt_kill", "agentbreaker_kill"}:
         _cancel_timeout(session_id)
         control.logger.pause_session(session_id, "Killed from Slack")
-        return {"text": f"AgentBreaker session {session_id} remains paused. Kill recorded."}
+        return {"text": f"SovereignHalt session {session_id} remains paused. Kill recorded."}
     raise HTTPException(status_code=400, detail="Unsupported Slack action")

@@ -1,4 +1,4 @@
-from agentbreaker import EnforcementHandler, ToolCall
+from sovereignhalt import EnforcementHandler, ToolCall
 
 
 handler = EnforcementHandler()

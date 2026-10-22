@@ -7,9 +7,8 @@ from urllib.parse import urlencode
 
 from fastapi.testclient import TestClient
 
-from agentbreaker_detector import Detector
-from slack_alerter import SlackAlerter
-from slack_webhook_handler import app, mark_loop_alert, register_session
+from sovereignhalt import Detector, SlackAlerter, ToolCall
+from sovereignhalt.slack_webhook_handler import app, mark_loop_alert, register_session
 
 
 class Logger:
@@ -27,7 +26,8 @@ class Logger:
 def test_block_kit_contains_continue_and_kill():
     payload = SlackAlerter._payload("s1", {"loop_type": "repeat", "fingerprint": "abc", "cycle_length": 3}, "read_invoice")
     actions = payload["attachments"][0]["blocks"][-1]["elements"]
-    assert [item["action_id"] for item in actions] == ["agentbreaker_continue", "agentbreaker_kill"]
+    assert [item["action_id"] for item in actions] == ["sovereignhalt_continue", "sovereignhalt_kill"]
+    assert "SovereignHalt" in payload["attachments"][0]["blocks"][0]["text"]["text"]
     assert actions[0]["style"] == "primary"
     assert actions[1]["style"] == "danger"
 
@@ -49,8 +49,8 @@ def test_continue_resets_detector():
     logger = Logger()
     register_session("s-continue", detector, logger)
     for _ in range(2):
-        detector.evaluate(__import__("agentbreaker_detector").ToolCall("s-continue", "read", {}))
-    response = TestClient(app).post("/webhook/slack", data={"payload": json.dumps({"actions": [{"action_id": "agentbreaker_continue", "value": json.dumps({"session_id": "s-continue"})}]})})
+        detector.evaluate(ToolCall("s-continue", "read", {}))
+    response = TestClient(app).post("/webhook/slack", data={"payload": json.dumps({"actions": [{"action_id": "sovereignhalt_continue", "value": json.dumps({"session_id": "s-continue"})}]})})
     assert response.status_code == 200
     assert detector._recent == {}
 
@@ -59,9 +59,21 @@ def test_kill_pauses_session():
     detector = Detector()
     logger = Logger()
     register_session("s-kill", detector, logger)
-    response = TestClient(app).post("/webhook/slack", data={"payload": json.dumps({"actions": [{"action_id": "agentbreaker_kill", "value": json.dumps({"session_id": "s-kill"})}]})})
+    response = TestClient(app).post("/webhook/slack", data={"payload": json.dumps({"actions": [{"action_id": "sovereignhalt_kill", "value": json.dumps({"session_id": "s-kill"})}]})})
     assert response.status_code == 200
     assert logger.paused == [("s-kill", "Killed from Slack")]
+
+
+def test_legacy_action_ids_remain_supported():
+    detector = Detector()
+    logger = Logger()
+    register_session("s-legacy", detector, logger)
+    response = TestClient(app).post(
+        "/webhook/slack",
+        data={"payload": json.dumps({"actions": [{"action_id": "agentbreaker_kill", "value": json.dumps({"session_id": "s-legacy"})}]})},
+    )
+    assert response.status_code == 200
+    assert logger.paused == [("s-legacy", "Killed from Slack")]
 
 
 def test_loop_alert_timeout_pauses_session():
@@ -77,7 +89,7 @@ def test_loop_alert_timeout_pauses_session():
 
 def test_slack_signature_is_required_when_configured(monkeypatch):
     monkeypatch.setenv("SLACK_SIGNING_SECRET", "test-secret")
-    payload = json.dumps({"actions": [{"action_id": "agentbreaker_kill", "value": json.dumps({"session_id": "missing"})}]})
+    payload = json.dumps({"actions": [{"action_id": "sovereignhalt_kill", "value": json.dumps({"session_id": "missing"})}]})
     body = urlencode({"payload": payload}).encode()
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"test-secret", f"v0:{timestamp}:".encode() + body, hashlib.sha256).hexdigest()

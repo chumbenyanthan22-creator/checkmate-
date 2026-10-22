@@ -25,7 +25,7 @@ class SlackAlerter:
             logger.info("Slack alert skipped: SLACK_WEBHOOK_URL is not configured")
             return
         payload = self._payload(session_id, loop_info, tool_name)
-        thread = threading.Thread(target=self._post, args=(payload,), daemon=True, name="agentbreaker-slack-alert")
+        thread = threading.Thread(target=self._post, args=(payload,), daemon=True, name="sovereignhalt-slack-alert")
         thread.start()
 
     @staticmethod
@@ -38,17 +38,17 @@ class SlackAlerter:
             "attachments": [{
                 "color": "#ef4444",
                 "blocks": [
-                    {"type": "header", "text": {"type": "plain_text", "text": "AgentBreaker loop detected"}},
+                    {"type": "header", "text": {"type": "plain_text", "text": "SovereignHalt loop detected"}},
                     {"type": "section", "fields": [
                         {"type": "mrkdwn", "text": f"*Tool*\n`{tool_name}`"},
                         {"type": "mrkdwn", "text": f"*Loop type*\n`{loop_type}`"},
                         {"type": "mrkdwn", "text": f"*Fingerprint*\n`{fingerprint[:16]}`"},
                         {"type": "mrkdwn", "text": f"*Cycle length*\n`{cycle_length}`"},
                     ]},
-                    {"type": "context", "elements": [{"type": "mrkdwn", "text": f"Session: `{session_id}` · AgentBreaker paused the session before dispatch."}]},
+                    {"type": "context", "elements": [{"type": "mrkdwn", "text": f"Session: `{session_id}` · SovereignHalt paused the session before dispatch."}]},
                     {"type": "actions", "elements": [
-                        {"type": "button", "action_id": "agentbreaker_continue", "text": {"type": "plain_text", "text": "Continue"}, "style": "primary", "value": value, "confirm": {"title": {"type": "plain_text", "text": "Continue this session?"}, "text": {"type": "mrkdwn", "text": "This resets the detector history for this session."}, "confirm": {"type": "plain_text", "text": "Continue"}, "deny": {"type": "plain_text", "text": "Cancel"}}},
-                        {"type": "button", "action_id": "agentbreaker_kill", "text": {"type": "plain_text", "text": "Kill"}, "style": "danger", "value": value, "confirm": {"title": {"type": "plain_text", "text": "Kill this session?"}, "text": {"type": "mrkdwn", "text": "The session will remain paused."}, "confirm": {"type": "plain_text", "text": "Kill"}, "deny": {"type": "plain_text", "text": "Cancel"}}},
+                        {"type": "button", "action_id": "sovereignhalt_continue", "text": {"type": "plain_text", "text": "Continue"}, "style": "primary", "value": value, "confirm": {"title": {"type": "plain_text", "text": "Continue this session?"}, "text": {"type": "mrkdwn", "text": "This resets the detector history for this session."}, "confirm": {"type": "plain_text", "text": "Continue"}, "deny": {"type": "plain_text", "text": "Cancel"}}},
+                        {"type": "button", "action_id": "sovereignhalt_kill", "text": {"type": "plain_text", "text": "Kill"}, "style": "danger", "value": value, "confirm": {"title": {"type": "plain_text", "text": "Kill this session?"}, "text": {"type": "mrkdwn", "text": "The session will remain paused."}, "confirm": {"type": "plain_text", "text": "Kill"}, "deny": {"type": "plain_text", "text": "Cancel"}}},
                     ]},
                 ],
             }]

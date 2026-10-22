@@ -26,7 +26,7 @@ Rebuild the existing root dashboard as SovereignHalt, a dense real-agent runtime
 - **Data controls:** Pause, Export Log, Isolate Agent and Recalibrate remain local to the visualization; export includes only loaded authenticated records.
 - **Environment contract:** document browser `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY`; server `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SOVEREIGNHALT_ALLOWED_EMAILS`, and the secret per-agent `SOVEREIGNHALT_INGEST_AGENTS_JSON` registry; SDK `SOVEREIGNHALT_INGEST_URL`, its own `SOVEREIGNHALT_INGEST_TOKEN`, and the registered real name/slug. Keep the workspace identity fixed in server code. Never commit or expose secret values. The Vercel connector was not approved, so production environment configuration remains an explicit deployment prerequisite.
 - **Design and responsive behavior:** keep the selected real agent as the cinematic core with a pulsing chest light, luminous faceplate, transparent holographic shell, gyroscopic rings, and scan/light effects. Surrounding avatars map one-to-one to actual agents. Bound the Canvas independently of viewport height and prevent portrait desktop-site overflow.
-- **Metadata:** keep the browser title, frontend package, README and visible wordmark branded SovereignHalt; preserve the Python import namespace and existing database schema contract.
+- **Metadata:** keep the browser title, frontend package, README, public SDK distribution/import namespace, Slack alerts, and visible wordmark branded SovereignHalt. Keep `agentbreaker` imports and existing database schema available as compatibility contracts.
 
 ## Project structure
 - `client/src/pages/SovereignHaltDashboard.tsx`: auth gate, dashboard panels, metrics and visualization controls.
@@ -38,5 +38,6 @@ Rebuild the existing root dashboard as SovereignHalt, a dense real-agent runtime
 - `server/_core/index.ts`: mount the same telemetry handlers in local Express before its general JSON parsers; `tests/api/telemetry/`: shared-handler regression tests outside the deployable function tree.
 - `agentbreaker/session_ids.py`: preserve UUID inputs and map legacy string session/company keys deterministically to schema-compatible UUIDs for direct session/cost compatibility.
 - `agentbreaker/callback.py` and `agentbreaker/supabase_logger.py`: explicit opt-in public callback telemetry and the protected API transport.
+- `sovereignhalt/`: canonical Python distribution/import facade; `agentbreaker/` and its implementation remain installed as a backward-compatible namespace.
 - `.env.example`, `SUPABASE.md`, and `TODO.md`: environment/setup instructions and outcome tracking.
 - `client/public/manus-routes.json`, `client/index.html`, and `app.config.ts`: route, title and logo metadata.

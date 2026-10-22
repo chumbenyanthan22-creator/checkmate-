@@ -1,4 +1,4 @@
-# AgentBreaker detector proof
+# SovereignHalt detector proof
 
 This proof uses a real Python handler, not seeded dashboard data.
 

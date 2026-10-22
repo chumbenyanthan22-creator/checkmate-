@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agentbreaker.slack_alerter import SlackAlerter
+from sovereignhalt import SlackAlerter
 
 
 session_id = "local-slack-scenario"

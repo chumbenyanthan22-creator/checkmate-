@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agentbreaker import CheckmateHandler, LoopDetectedException  # noqa: E402
+from sovereignhalt import CheckmateHandler, LoopDetectedException  # noqa: E402
 
 
 def run_looping_agent(handler: CheckmateHandler, calls: list[tuple[str, dict]]) -> str:
