@@ -194,6 +194,10 @@ function AgentNode({
   emergencyStopped,
   isolated,
   isolationActive,
+  motionEnabled,
+  reducedMotion,
+  phase,
+  densityScale,
   onSelect,
 }: {
   agent: GraphAgent;
@@ -203,6 +207,10 @@ function AgentNode({
   emergencyStopped: boolean;
   isolated: boolean;
   isolationActive: boolean;
+  motionEnabled: boolean;
+  reducedMotion: boolean;
+  phase: number;
+  densityScale: number;
   onSelect: (id: string) => void;
 }) {
   const critical = isCritical(agent, emergencyStopped);
@@ -212,72 +220,208 @@ function AgentNode({
     : isolationActive && !isolated
       ? 0.16
       : 0.96;
+  const model = useRef<THREE.Group>(null);
+  const orbit = useRef<THREE.Group>(null);
+  const coreMaterial = useRef<THREE.MeshStandardMaterial>(null);
+  const displayScale = selected ? 1.62 : 1;
+  const labelY = selected ? -0.66 : -0.45;
+
+  useFrame(({ clock }) => {
+    const time = clock.elapsedTime * (reducedMotion ? 0.16 : 1) + phase;
+    if (model.current) {
+      model.current.position.y = motionEnabled ? Math.sin(time * 1.15) * 0.025 : 0;
+      model.current.rotation.y = motionEnabled ? Math.sin(time * 0.34) * 0.17 : 0;
+    }
+    if (orbit.current) {
+      orbit.current.rotation.set(
+        Math.PI / 2 + (motionEnabled ? Math.sin(time * 0.24) * 0.08 : 0),
+        motionEnabled ? time * 0.34 : 0,
+        motionEnabled ? Math.cos(time * 0.2) * 0.08 : 0
+      );
+    }
+    if (coreMaterial.current) {
+      coreMaterial.current.emissiveIntensity = selected
+        ? 3.1 + (motionEnabled ? Math.sin(time * 2.4) * 0.65 : 0)
+        : 1.9 + (motionEnabled ? Math.sin(time * 2.1) * 0.45 : 0);
+    }
+  });
+
   const hit = (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
     onSelect(agent.id);
   };
 
   return (
-    <group ref={nodeRef} position={initialPosition.toArray()}>
-      <mesh onClick={hit}>
-        <sphereGeometry args={[selected ? 0.17 : 0.14, 16, 16]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={selected ? 3.8 : critical ? 3 : 2.4}
-          metalness={0.2}
-          roughness={0.16}
-          transparent
-          opacity={opacity}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh scale={selected ? 1.45 : 1.22}>
-        <sphereGeometry args={[0.14, 12, 12]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={opacity * (selected ? 0.2 : 0.1)}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} onClick={hit}>
-        <torusGeometry args={[selected ? 0.245 : 0.205, 0.008, 8, 40]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={opacity * 0.78}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh rotation={[0.35, 0.7, 0]} scale={0.78}>
-        <torusGeometry args={[selected ? 0.26 : 0.22, 0.0045, 6, 36]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={opacity * 0.34}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-      {selected && !emergencyStopped && (
-        <pointLight color={color} intensity={1.1} distance={1.8} />
-      )}
-      <Text
-        position={[0, -0.24, 0]}
-        fontSize={0.082}
-        maxWidth={0.95}
-        textAlign="center"
-        color={critical ? "#ff9baa" : "#a8f4ff"}
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.006}
-        outlineColor="#071018"
-      >
-        {agent.name}
-      </Text>
+    <group ref={nodeRef} position={initialPosition.toArray()} onClick={hit}>
+      <group scale={densityScale}>
+        <group ref={model} scale={displayScale}>
+          <mesh>
+            <sphereGeometry args={[0.3, 24, 24]} />
+            <meshBasicMaterial
+              color={selected ? "#8c6cff" : color}
+              transparent
+              opacity={opacity * (selected ? 0.09 : 0.045)}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+
+          <mesh position={[0, -0.075, 0]} scale={[0.9, 1.12, 0.78]}>
+            <sphereGeometry args={[0.145, 24, 20]} />
+            <meshPhysicalMaterial
+              color="#0b1d2b"
+              emissive={color}
+              emissiveIntensity={0.38}
+              metalness={0.88}
+              roughness={0.2}
+              clearcoat={0.9}
+              clearcoatRoughness={0.18}
+              transparent
+              opacity={opacity}
+            />
+          </mesh>
+          <mesh position={[0, -0.027, 0]} scale={[1.34, 0.58, 0.88]}>
+            <sphereGeometry args={[0.125, 20, 16]} />
+            <meshPhysicalMaterial
+              color="#17263a"
+              emissive={color}
+              emissiveIntensity={0.22}
+              metalness={0.92}
+              roughness={0.24}
+              clearcoat={1}
+              transparent
+              opacity={opacity}
+            />
+          </mesh>
+          <mesh position={[0, 0.067, 0]}>
+            <cylinderGeometry args={[0.034, 0.043, 0.058, 14]} />
+            <meshStandardMaterial color="#172b3b" metalness={0.86} roughness={0.24} />
+          </mesh>
+          <mesh position={[0, 0.157, 0]}>
+            <sphereGeometry args={[0.096, 24, 20]} />
+            <meshPhysicalMaterial
+              color="#102638"
+              emissive={color}
+              emissiveIntensity={0.4}
+              metalness={0.76}
+              roughness={0.19}
+              clearcoat={1}
+              transparent
+              opacity={opacity}
+            />
+          </mesh>
+
+          <mesh position={[0, 0.158, 0.079]}>
+            <boxGeometry args={[0.167, 0.064, 0.024]} />
+            <meshPhysicalMaterial
+              color={critical ? "#3c1527" : "#0d5265"}
+              emissive={color}
+              emissiveIntensity={selected ? 2.5 : 1.7}
+              metalness={0.35}
+              roughness={0.14}
+              clearcoat={1}
+              transparent
+              opacity={opacity}
+            />
+          </mesh>
+          <mesh position={[0, 0.158, 0.095]}>
+            <boxGeometry args={[0.12, 0.006, 0.004]} />
+            <meshBasicMaterial color="#e8fcff" transparent opacity={opacity * 0.92} toneMapped={false} />
+          </mesh>
+          {[-1, 1].map(side => (
+            <mesh key={side} position={[side * 0.105, 0.16, 0]}>
+              <sphereGeometry args={[0.026, 14, 12]} />
+              <meshStandardMaterial
+                color="#142b3e"
+                emissive={color}
+                emissiveIntensity={0.8}
+                metalness={0.82}
+                roughness={0.2}
+              />
+            </mesh>
+          ))}
+
+          <mesh position={[0, -0.072, 0.126]}>
+            <icosahedronGeometry args={[0.043, 1]} />
+            <meshStandardMaterial
+              ref={coreMaterial}
+              color="#c3fbff"
+              emissive={color}
+              emissiveIntensity={2}
+              metalness={0.42}
+              roughness={0.13}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh position={[0, -0.072, 0.124]}>
+            <torusGeometry args={[0.064, 0.004, 6, 32]} />
+            <meshBasicMaterial
+              color={color}
+              transparent
+              opacity={opacity * 0.72}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+
+          <group ref={orbit} rotation={[Math.PI / 2, 0, 0]}>
+            <mesh>
+              <torusGeometry args={[0.34, 0.005, 6, 72]} />
+              <meshBasicMaterial
+                color={selected ? "#ba9aff" : color}
+                transparent
+                opacity={opacity * 0.7}
+                blending={THREE.AdditiveBlending}
+                toneMapped={false}
+              />
+            </mesh>
+            <mesh position={[0.34, 0, 0]}>
+              <icosahedronGeometry args={[0.021, 1]} />
+              <meshBasicMaterial color="#f2ffff" toneMapped={false} />
+            </mesh>
+          </group>
+          <mesh rotation={[0.68, 0.75, 0.16]}>
+            <torusGeometry args={[0.31, 0.0035, 5, 64]} />
+            <meshBasicMaterial
+              color={selected ? "#56e6ff" : "#a679ff"}
+              transparent
+              opacity={opacity * 0.42}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+          {selected && !emergencyStopped && (
+            <pointLight color={color} intensity={1.3} distance={1.5} />
+          )}
+        </group>
+
+        <mesh position={[0, labelY, 0.02]}>
+          <planeGeometry args={[0.88, 0.13]} />
+          <meshBasicMaterial
+            color={selected ? "#0d3542" : "#07121f"}
+            transparent
+            opacity={opacity * (selected ? 0.9 : 0.7)}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <Text
+          position={[0, labelY, 0.032]}
+          fontSize={0.065}
+          maxWidth={0.82}
+          textAlign="center"
+          color={critical ? "#ffb2c0" : "#e1fbff"}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.004}
+          outlineColor="#040914"
+          letterSpacing={0.025}
+        >
+          {agent.name}
+        </Text>
+      </group>
     </group>
   );
 }
@@ -350,53 +494,56 @@ function FlowLink({
   );
 }
 
-function EnergyOrb({
-  position,
-  color,
+function HolographicStage({
   motionEnabled,
   reducedMotion,
-  phase,
 }: {
-  position: [number, number, number];
-  color: string;
   motionEnabled: boolean;
   reducedMotion: boolean;
-  phase: number;
 }) {
-  const group = useRef<THREE.Group>(null);
-  const base = useMemo(() => new THREE.Vector3(...position), [position]);
+  const scaffold = useRef<THREE.Group>(null);
 
-  useFrame(state => {
-    if (!group.current || !motionEnabled) return;
-    const scale = reducedMotion ? 0.18 : 1;
-    const time = state.clock.elapsedTime * scale + phase;
-    group.current.position.set(
-      base.x + Math.sin(time * 0.62) * 0.12,
-      base.y + Math.cos(time * 0.48) * 0.16,
-      base.z + Math.sin(time * 0.39) * 0.1
-    );
-    group.current.rotation.y += state.clock.getDelta() * 0.12 * scale;
+  useFrame(({ clock }) => {
+    if (!scaffold.current) return;
+    const pace = reducedMotion ? 0.16 : 1;
+    scaffold.current.rotation.z = motionEnabled
+      ? Math.sin(clock.elapsedTime * 0.08 * pace) * 0.025
+      : 0;
+    scaffold.current.rotation.y = motionEnabled
+      ? Math.sin(clock.elapsedTime * 0.07 * pace) * 0.06
+      : 0;
   });
 
   return (
-    <group ref={group} position={position}>
+    <group ref={scaffold} position={[0, 0, -1.2]}>
       <mesh>
-        <sphereGeometry args={[0.24, 16, 16]} />
+        <torusGeometry args={[2.78, 0.0045, 5, 128]} />
         <meshBasicMaterial
-          color={color}
+          color="#56e6ff"
           transparent
-          opacity={0.07}
+          opacity={0.11}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}
         />
       </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.2, 0.008, 8, 28]} />
+      <mesh rotation={[Math.PI / 2, 0.34, 0]}>
+        <torusGeometry args={[2.62, 0.0035, 5, 112]} />
         <meshBasicMaterial
-          color={color}
+          color="#a679ff"
           transparent
-          opacity={0.24}
+          opacity={0.095}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh rotation={[0.18, 0.42, 0.9]}>
+        <torusGeometry args={[2.9, 0.0025, 4, 128]} />
+        <meshBasicMaterial
+          color="#6da9cd"
+          transparent
+          opacity={0.055}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}
@@ -428,12 +575,30 @@ function NetworkGraph({
     Array<React.MutableRefObject<THREE.Group | null>>
   >(() => graphAgents.map(() => ({ current: null })), [graphAgents.length]);
   const motionEnabled = running && !emergencyStopped;
+  const selectedIndex = graphAgents.findIndex(agent => agent.id === selectedId);
+  const densityScale = Math.max(
+    0.58,
+    1 - Math.max(0, graphAgents.length - 10) * 0.018
+  );
   const states = useMemo(
     () =>
       graphAgents.map((_, index) => {
+        if (index === selectedIndex) {
+          return {
+            position: new THREE.Vector3(0, 0, 0),
+            home: new THREE.Vector3(0, 0, 0),
+            velocity: new THREE.Vector3(),
+            phase: index * 1.37,
+          };
+        }
+        const orbitCount = graphAgents.length - (selectedIndex >= 0 ? 1 : 0);
+        const orbitIndex = selectedIndex >= 0 && index > selectedIndex ? index - 1 : index;
         const angle =
-          (index / Math.max(1, graphAgents.length)) * Math.PI * 2 - Math.PI / 2;
-        const radius = 1.92 + (index % 3) * 0.14;
+          (orbitIndex / Math.max(1, orbitCount)) * Math.PI * 2 - Math.PI / 2;
+        const radius =
+          1.92 +
+          Math.min(0.72, Math.max(0, orbitCount - 8) * 0.055) +
+          (orbitIndex % 3) * 0.14;
         const x = Math.cos(angle) * radius;
         const y =
           Math.sin(angle) * radius * 0.58 + Math.sin(index * 1.91) * 0.14;
@@ -445,19 +610,34 @@ function NetworkGraph({
           phase: index * 1.37,
         };
       }),
-    [graphAgents.length]
+    [graphAgents.length, selectedIndex]
   );
   const edges = useMemo(() => {
     const result: Array<[number, number]> = [];
     const count = graphAgents.length;
     if (count < 2) return result;
+    if (selectedIndex >= 0) {
+      const orbitIndexes = graphAgents
+        .map((_, index) => index)
+        .filter(index => index !== selectedIndex);
+      orbitIndexes.forEach(index => result.push([selectedIndex, index]));
+      if (orbitIndexes.length > 2) {
+        for (let index = 0; index < orbitIndexes.length; index += 1) {
+          result.push([
+            orbitIndexes[index],
+            orbitIndexes[(index + 1) % orbitIndexes.length],
+          ]);
+        }
+      }
+      return result;
+    }
     for (let index = 0; index < count; index += 1) {
       result.push([index, (index + 1) % count]);
       if (index % 2 === 0 && count > 4)
         result.push([index, (index + 2) % count]);
     }
     return result;
-  }, [graphAgents.length]);
+  }, [graphAgents, selectedIndex]);
 
   useFrame(state => {
     if (!motionEnabled) {
@@ -550,6 +730,10 @@ function NetworkGraph({
           emergencyStopped={emergencyStopped}
           isolated={agent.id === isolatedAgentId}
           isolationActive={Boolean(isolatedAgentId)}
+          motionEnabled={motionEnabled}
+          reducedMotion={reducedMotion}
+          phase={index * 1.37}
+          densityScale={densityScale}
           onSelect={onSelectAgent}
         />
       ))}
@@ -624,6 +808,10 @@ export default function NeuralCoreScene({
       >
         {summary}
       </Text>
+      <HolographicStage
+        motionEnabled={motionEnabled}
+        reducedMotion={reducedMotion}
+      />
       <NetworkGraph
         graphAgents={graphAgents}
         selectedId={selectedId}
@@ -632,27 +820,6 @@ export default function NeuralCoreScene({
         isolatedAgentId={isolatedAgentId}
         reducedMotion={reducedMotion}
         onSelectAgent={onSelectAgent}
-      />
-      <EnergyOrb
-        position={[-1.9, 1.18, -0.8]}
-        color={emergencyStopped ? "#ff4f71" : "#45e7ff"}
-        motionEnabled={motionEnabled}
-        reducedMotion={reducedMotion}
-        phase={0.2}
-      />
-      <EnergyOrb
-        position={[1.92, -0.88, -0.65]}
-        color={emergencyStopped ? "#ff4f71" : "#9872ff"}
-        motionEnabled={motionEnabled}
-        reducedMotion={reducedMotion}
-        phase={1.8}
-      />
-      <EnergyOrb
-        position={[0.25, 1.55, 1.35]}
-        color={emergencyStopped ? "#ff4f71" : "#ffd16e"}
-        motionEnabled={motionEnabled}
-        reducedMotion={reducedMotion}
-        phase={3.1}
       />
       <OrbitControls
         target={[0, 0, 0]}
