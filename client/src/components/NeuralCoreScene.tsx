@@ -223,8 +223,12 @@ function AgentNode({
   const model = useRef<THREE.Group>(null);
   const orbit = useRef<THREE.Group>(null);
   const coreMaterial = useRef<THREE.MeshStandardMaterial>(null);
-  const displayScale = selected ? 1.62 : 1;
-  const labelY = selected ? -0.66 : -0.45;
+  const heroField = useRef<THREE.Group>(null);
+  const fieldShell = useRef<THREE.MeshBasicMaterial>(null);
+  const scanline = useRef<THREE.Mesh>(null);
+  const pulseRing = useRef<THREE.Mesh>(null);
+  const displayScale = selected ? 2 : 1;
+  const labelY = selected ? -1.08 : -0.45;
 
   useFrame(({ clock }) => {
     const time = clock.elapsedTime * (reducedMotion ? 0.16 : 1) + phase;
@@ -239,9 +243,26 @@ function AgentNode({
         motionEnabled ? Math.cos(time * 0.2) * 0.08 : 0
       );
     }
+    if (heroField.current) {
+      heroField.current.rotation.set(
+        motionEnabled ? Math.sin(time * 0.27) * 0.11 : 0,
+        motionEnabled ? time * 0.16 : 0,
+        motionEnabled ? Math.cos(time * 0.21) * 0.08 : 0
+      );
+    }
+    if (fieldShell.current) {
+      fieldShell.current.opacity = opacity * (0.18 + (motionEnabled ? Math.sin(time * 1.9) * 0.045 : 0));
+    }
+    if (scanline.current) {
+      scanline.current.position.y = motionEnabled ? Math.sin(time * 1.1) * 0.23 : 0;
+    }
+    if (pulseRing.current) {
+      const pulse = motionEnabled ? 1 + Math.sin(time * 1.7) * 0.055 : 1;
+      pulseRing.current.scale.setScalar(pulse);
+    }
     if (coreMaterial.current) {
       coreMaterial.current.emissiveIntensity = selected
-        ? 3.1 + (motionEnabled ? Math.sin(time * 2.4) * 0.65 : 0)
+        ? 5 + (motionEnabled ? Math.sin(time * 2.4) * 1.1 : 0)
         : 1.9 + (motionEnabled ? Math.sin(time * 2.1) * 0.45 : 0);
     }
   });
@@ -365,6 +386,56 @@ function AgentNode({
             />
           </mesh>
 
+          {selected && (
+            <group ref={heroField}>
+              <mesh scale={[1, 1.24, 0.9]}>
+                <icosahedronGeometry args={[0.48, 1]} />
+                <meshBasicMaterial
+                  ref={fieldShell}
+                  color="#70f3ff"
+                  wireframe
+                  transparent
+                  opacity={opacity * 0.18}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh rotation={[0.52, 0.4, 0.22]} scale={[1.08, 0.94, 1.08]}>
+                <icosahedronGeometry args={[0.5, 1]} />
+                <meshBasicMaterial
+                  color="#a679ff"
+                  wireframe
+                  transparent
+                  opacity={opacity * 0.13}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh rotation={[Math.PI / 2, 0.08, 0]}>
+                <torusGeometry args={[0.57, 0.006, 8, 96]} />
+                <meshBasicMaterial color="#56e6ff" transparent opacity={opacity * 0.82} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              </mesh>
+              <mesh rotation={[0.24, 0.3, 1.12]}>
+                <torusGeometry args={[0.61, 0.004, 6, 96]} />
+                <meshBasicMaterial color="#b58aff" transparent opacity={opacity * 0.7} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              </mesh>
+              <mesh ref={pulseRing} position={[0, -0.4, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.49, 0.005, 6, 96]} />
+                <meshBasicMaterial color="#55efff" transparent opacity={opacity * 0.6} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              </mesh>
+              <mesh position={[0, -0.04, -0.06]}>
+                <cylinderGeometry args={[0.2, 0.44, 0.96, 8, 1, true]} />
+                <meshBasicMaterial color="#4be8ff" transparent opacity={opacity * 0.035} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              </mesh>
+              <mesh ref={scanline} position={[0, 0, 0.46]}>
+                <planeGeometry args={[0.48, 0.009]} />
+                <meshBasicMaterial color="#e5fdff" transparent opacity={opacity * 0.86} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              </mesh>
+            </group>
+          )}
+
           <group ref={orbit} rotation={[Math.PI / 2, 0, 0]}>
             <mesh>
               <torusGeometry args={[0.34, 0.005, 6, 72]} />
@@ -393,7 +464,7 @@ function AgentNode({
             />
           </mesh>
           {selected && !emergencyStopped && (
-            <pointLight color={color} intensity={1.3} distance={1.5} />
+            <pointLight position={[0, 0.08, 0.35]} color="#61efff" intensity={3.1} distance={3.1} />
           )}
         </group>
 

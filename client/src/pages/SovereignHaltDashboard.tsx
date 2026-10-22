@@ -656,8 +656,8 @@ export default function SovereignHaltDashboard() {
             <div className="sh-graph-heading">
               <div>
                 <span className="sh-kicker"><Activity size={12} /> FORCE-DIRECTED AGENT FIELD</span>
-                <h1>LIVE AGENT NETWORK</h1>
-                <p>{connected ? `${agents.length} verified agent nodes · ${visibleEvents.length} scoped events` : "Waiting for a verified workspace scope"}</p>
+                <h1>HOLOGRAPHIC AGENT CORE</h1>
+                <p>{selectedAgent ? `${selectedAgent.name} · ${agents.length} verified agents · ${visibleEvents.length} scoped events` : "Waiting for a verified workspace scope"}</p>
               </div>
               <div className={`sh-network-state ${connected ? "is-on" : ""}`}>
                 <i /> {connected ? "OBSERVING" : "UNBOUND"}
