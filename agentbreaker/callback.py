@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -34,6 +35,11 @@ class CheckmateHandler(_CallbackBase):
         max_iterations: int | None = 12,
         max_budget_usd: float | None = None,
         cost_per_call_usd: float = 0.0,
+        telemetry_enabled: bool = False,
+        agent_name: str | None = None,
+        agent_slug: str | None = None,
+        agent_id: str | None = None,
+        telemetry_logger: Any | None = None,
     ) -> None:
         try:
             super().__init__()
@@ -44,6 +50,36 @@ class CheckmateHandler(_CallbackBase):
         self.max_budget_usd = None if max_budget_usd is None else float(max_budget_usd)
         self.cost_per_call_usd = float(cost_per_call_usd)
         self.current_spend = 0.0
+        if telemetry_logger is None and telemetry_enabled:
+            from dotenv import load_dotenv
+
+            load_dotenv()
+            if not os.environ.get("SOVEREIGNHALT_INGEST_URL"):
+                raise RuntimeError("SOVEREIGNHALT_INGEST_URL is required when SDK telemetry is enabled")
+            from .supabase_logger import SupabaseLogger
+
+            telemetry_logger = SupabaseLogger(
+                agent_name=agent_name,
+                agent_slug=agent_slug,
+                agent_id=agent_id,
+            )
+        self.telemetry_logger = telemetry_logger
+
+    def _record_telemetry(self, tool_name: str, decision: str, signal: str) -> None:
+        if self.telemetry_logger is None:
+            return
+        try:
+            self.telemetry_logger.record_decision(
+                self.session_id,
+                {
+                    "action": tool_name,
+                    "decision": decision,
+                    "signal": signal,
+                },
+            )
+        except Exception:
+            # Telemetry transport must never change whether a tool is dispatched.
+            return
 
     def on_tool_start(
         self,
@@ -59,10 +95,23 @@ class CheckmateHandler(_CallbackBase):
         args = inputs if isinstance(inputs, dict) else {"input": input_str}
         estimated = self.cost_per_call_usd
         if self.max_budget_usd is not None and self.current_spend + estimated > self.max_budget_usd:
+            self._record_telemetry(
+                tool_name,
+                "budget_exceeded",
+                "budget_exceeded",
+            )
             raise BudgetExceededException(self.session_id, tool_name, self.current_spend, self.max_budget_usd)
         call = ToolCall(self.session_id, tool_name, args)
         decision = self.detector.evaluate(call)
         if decision.action == "blocked":
+            signal = (
+                "max_iterations_exceeded"
+                if "max_iterations" in decision.matched_policies
+                else "loop_detected"
+                if "loop_and_no_progress_detection" in decision.matched_policies
+                else "policy_blocked"
+            )
+            self._record_telemetry(tool_name, "blocked", signal)
             if "max_iterations" in decision.matched_policies:
                 cap = self.detector.max_iterations or 0
                 raise LoopDetectedException(
@@ -73,6 +122,7 @@ class CheckmateHandler(_CallbackBase):
                     reason=f"Session exceeded max_iterations={cap} on {tool_name}",
                 )
             raise LoopDetectedException(self.session_id, tool_name, call.fingerprint, self.detector.loop_threshold)
+        self._record_telemetry(tool_name, "allowed", "guard_allowed")
         self.current_spend += estimated
 
     def guard(self, tool_name: str, args: dict[str, Any] | None = None) -> None:

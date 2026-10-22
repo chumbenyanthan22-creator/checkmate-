@@ -1,50 +1,31 @@
-# Supabase integration
+# Supabase and private telemetry
 
-AgentBreaker is connected to the Supabase project `AgentBreaker` in `ap-south-1`.
+SovereignHalt uses the existing Supabase project for authentication and agent telemetry. The browser signs in through Supabase email OTP with the publishable key; it never queries tenant tables. The dashboard calls same-origin serverless endpoints that validate the signed-in user's confirmed email and enforce `SOVEREIGNHALT_ALLOWED_EMAILS` before reading the dedicated workspace.
 
-## Live data model
+## Private dashboard access
 
-- `workspaces` — tenant/workspace identity
-- `agents` — registered agent fleet, budgets, risk, and status
-- `policies` — runtime guardrails and enablement
-- `approvals` — human-in-the-loop decisions
-- `audit_events` — append-oriented evidence of agent activity
+Create or invite the owner account in Supabase Auth and add the deployed Vercel origin to Supabase Auth's allowed redirect URLs. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel for browser OTP sign-in. In Vercel server-only settings, set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SOVEREIGNHALT_ALLOWED_EMAILS` (comma-separated confirmed email addresses). The service-role key must never use a `VITE_` prefix or appear in browser code. The UI and API fail closed if these settings are missing.
 
-The migration and demo seed are stored in `supabase/migrations/20261003_agentbreaker_funding_ready_schema.sql`.
+`GET /api/telemetry/dashboard` returns up to 100 agents and 250 audit events from the fixed SovereignHalt workspace. It omits metadata and non-SovereignHalt rows, applies a 30-day window bounded above by server time, and sends private non-cacheable responses. The workspace must match the exact reserved slug `sovereignhalt-primary`, name `SovereignHalt`, and plan marker `sovereignhalt-private-v1`; a mismatch fails closed.
 
-## Frontend connection
+## Agent ingestion
 
-The dashboard reads the demo workspace from Supabase using the browser-safe publishable key. It shows `Supabase synced` when the live reads succeed and falls back to seed data if the network is unavailable.
+`POST /api/telemetry/ingest` requires a per-agent bearer token. In Vercel's server-only environment, set `SOVEREIGNHALT_INGEST_AGENTS_JSON` to a JSON array with one profile per real producer. Each profile requires a canonical `name`, stable `slug`, unique random `token` of at least 32 characters, `agent_class` (`standard` or `privileged`), and `risk_level` (`low`, `medium`, `high`, or `critical`). Optional `id` and `description` are server-owned metadata. The bearer token alone selects the profile; the request body accepts only an event ID, bounded action identifier, and explicit signal—no caller-supplied name, slug, status, risk, outcome, or timestamp. Never expose this registry or its tokens to browser code, commit them, or share one token between agents.
 
-For deployment, set:
+For each producer, configure its Python runtime with the deployed HTTPS `/api/telemetry/ingest` URL and the token from only its own registry entry as `SOVEREIGNHALT_INGEST_TOKEN`. The optional local `SOVEREIGNHALT_AGENT_NAME` and `SOVEREIGNHALT_AGENT_SLUG` settings are explicit SDK/callback labels, not server identity claims; the token selects the canonical profile. API-only `SupabaseLogger` mode does not need `SUPABASE_SERVICE_ROLE_KEY` or a direct Supabase key in the agent runtime.
 
-```sh
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-```
+The SDK sends only an event containing a bounded tool-action identifier, an explicit signal (`guard_allowed`, `loop_detected`, `max_iterations_exceeded`, `budget_exceeded`, `policy_blocked`, or `approval_required`), and a UUID event ID. The API derives canonical agent identity from the token, derives event outcome/risk/detail from the signal, stamps `created_at` with server time, and uses the UUID for idempotent inserts. It creates a hidden provisional agent row before the audit event, then marks it recently seen only after the event is linked; the dashboard returns only registered agents with recent valid linked events. Free-form detail, caller-supplied identity/status/risk/outcome/timestamps, tool arguments, and outputs are rejected. The Python SDK requires HTTPS and the exact ingestion path; it never sends the bearer token in a URL. A bounded local outbox records failed API events for review, but this repository does not run an automatic replay worker.
 
-The publishable key is safe for browser use only when Row Level Security remains enabled. Do not place a Supabase service-role key in frontend code.
+The optional legacy direct-Supabase writer continues to support existing session and cost tables only when `SOVEREIGNHALT_LEGACY_DIRECT_SUPABASE=true` is explicitly set in a trusted server runtime. It requires `SUPABASE_URL` and a service-role credential (`SUPABASE_SERVICE_ROLE_KEY` preferred); the legacy `SUPABASE_KEY` alias is accepted only when its format declares `role=service_role` or starts with `sb_secret_`. This is a local guard against anon/publishable keys, not signature verification; Supabase validates credentials on requests. API-only mode ignores database credentials and does not write dashboard decision events. Never put a service-role credential in browser code. Dashboard decisions require the protected API and an explicit allowlisted signal.
 
-## Current prototype boundary
+## Workspace and schema safety
 
-The dashboard’s approval, policy-toggle, and emergency-stop interactions remain local demo state. A production version should add authenticated users, workspace-scoped RLS policies, server-side approval mutations, append-only audit ingestion, and realtime subscriptions before handling real financial or operational actions.
+On the first valid producer event, the API inserts the fixed workspace marker; it never upserts or overwrites an existing workspace. If `sovereignhalt-primary` already exists without the exact SovereignHalt name and private plan marker, ingestion fails closed. Agent identity is canonicalized from the server registry; existing agent names and IDs cannot be rewritten by a producer. Dashboard startup never inserts workspaces, agents, audit rows, fixtures, or synthetic graph nodes.
 
-## Detector pipeline
+The workspace, agent, and audit-event tables are defined by `supabase/migrations/20261003_agentbreaker_funding_ready_schema.sql`. That historical migration also inserted the Acme fixture workspace, agents, policies, approvals, audit events, and five `anon`/`authenticated` read policies. The dashboard API excludes the Acme workspace, but those legacy policies remain active in an already-migrated Supabase project until removed. The older `agent_sessions`, `tool_execution_logs`, and `agent_alerts` tables are also unscoped and were created without RLS. The historical `002_cost_tracking.sql` now adds `tool_execution_logs.agent_id` without an FK because `public.agents` is created later; the FK is installed by the ordered migration below.
 
-The applied migration `supabase/migrations/001_create_detector_tables.sql` adds:
+Review and manually apply these migrations in timestamp order: `supabase/migrations/20261022113437_add_legacy_agent_fk.sql`, `supabase/migrations/20261022113438_remove_legacy_acme_demo.sql`, then `supabase/migrations/20261022113439_secure_legacy_direct_tables.sql`. The first adds the FK after `public.agents` exists and is safe if the FK was already created by an older install. The second drops the five exact demo-read policies. It deletes the Acme fixture only when its reserved ID, slug, name, and `demo` plan marker all match and its workspace children match the canonical seeded IDs; if unexpected rows exist, it emits a notice and retains fixture data for manual review. It removes tool logs only when they reference one of the three exact fixture agent IDs still scoped to that workspace. The third enables RLS, revokes table/sequence privileges from `PUBLIC`, `anon`, and `authenticated` on the unscoped legacy session/cost/alert tables, grants the trusted `service_role` the needed table/sequence privileges, and creates no public policies. **All three migrations are manual and unapplied; they are not executed by the app build or this task.** Until an owner applies them, the old demo-read policies and legacy-table access settings remain unchanged in Supabase. Database-default status, risk, class, and `tool_calls` values are not presented as live telemetry; visible agent profiles come from the server registry and must be backed by a recent, valid, linked SDK event.
 
-- `agent_sessions`
-- `tool_execution_logs`
-- `agent_alerts`
+## Deployment prerequisites
 
-`SupabaseLogger` checks these tables at startup, connects from `SUPABASE_URL` and `SUPABASE_KEY` when no client is injected, and writes failures to `.agentbreaker-outbox.jsonl`. Database DDL is applied through the migration, not executed by the runtime with a public key.
-
-The real proof agent wrote session `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb` with 2 tool executions, 3 loop alerts, `$0.02` spend, and `is_paused = true`. The dashboard now reads `agent_alerts` and displays the caught loops as live activity.
-
-## RLS hardening required
-
-Supabase currently reports the three detector tables as RLS-disabled. This is acceptable only for the temporary demo proof and exposes rows to clients using the anon key. Before production, enable RLS and add authenticated, workspace/session-scoped policies. Do not use the anon key for unrestricted server writes; use a server-side service-role secret or protected backend route.
-
-## Cost telemetry
-
-Migration `supabase/migrations/002_cost_tracking.sql` adds `model_name`, `output_tokens_estimated`, and optional `agent_id` to `tool_execution_logs`. `CostCalculator` estimates output tokens as roughly four characters per token and applies rates from `pricing_config.json` or `AGENTBREAKER_PRICING_CONFIG`; it never calls a model provider. Each `SupabaseLogger.log_tool_call()` writes the calculated cost and increments `agent_sessions.current_spend_usd`. `AggregateSpendingView` groups costs by UTC day and agent/session and caches results for five minutes.
+The Vercel connector was not authorized for this task, so production environment values have not been changed. Before public access, an owner should review and apply all three migrations above, configure the browser/server variables, create the allowlisted Supabase Auth user, deploy the API functions, and register at least one actual Python producer with its own token and real identity. Until a genuine SDK event arrives, the authenticated dashboard intentionally shows an empty state rather than sample data.

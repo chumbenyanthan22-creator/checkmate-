@@ -7,10 +7,36 @@ import { publicPlatformScript } from "./publicConfig";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import dashboardTelemetryHandler from "../api/telemetry/dashboard";
+import ingestTelemetryHandler from "../api/telemetry/ingest";
+import type { ApiRequest, ApiResponse } from "../api/telemetry/common";
+
+function adaptTelemetryRequest(request: import("express").Request): ApiRequest {
+  return {
+    method: request.method,
+    headers: request.headers as ApiRequest["headers"],
+    [Symbol.asyncIterator]: () => request[Symbol.asyncIterator](),
+    resume: () => request.resume(),
+  };
+}
+
+function telemetryRoute(
+  handler: (request: ApiRequest, response: ApiResponse) => Promise<void>,
+) {
+  return (request: import("express").Request, response: import("express").Response) => {
+    void handler(adaptTelemetryRequest(request), response as unknown as ApiResponse).catch(() => {
+      if (!response.headersSent)
+        response.status(500).json({ error: "internal_server_error" });
+    });
+  };
+}
 
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Handle telemetry before the global parsers so its 4 KiB raw-stream cap applies.
+  app.get("/api/telemetry/dashboard", telemetryRoute(dashboardTelemetryHandler));
+  app.post("/api/telemetry/ingest", telemetryRoute(ingestTelemetryHandler));
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

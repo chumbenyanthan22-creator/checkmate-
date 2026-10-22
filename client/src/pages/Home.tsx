@@ -1,1 +1,1 @@
-export { default } from "./SovereignHaltDashboard";
+export { default } from "../components/SovereignHaltAuthGate";

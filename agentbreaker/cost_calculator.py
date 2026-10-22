@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .session_ids import schema_uuid
 
 DEFAULT_PRICING_PATH = Path(__file__).with_name("pricing_config.json")
 
@@ -44,9 +45,10 @@ class CostCalculator:
     def aggregate_cost(self, session_id: str, start_time: datetime | str, end_time: datetime | str) -> float:
         if self.supabase_client is None:
             raise RuntimeError("aggregate_cost requires a Supabase client")
+        database_session_id = schema_uuid(session_id, "session")
         response = (self.supabase_client.table("tool_execution_logs")
                     .select("cost_incurred")
-                    .eq("session_id", session_id)
+                    .eq("session_id", database_session_id)
                     .gte("executed_at", _iso(start_time))
                     .lte("executed_at", _iso(end_time))
                     .limit(10000)

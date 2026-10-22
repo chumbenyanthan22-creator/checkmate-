@@ -7,6 +7,7 @@ import {
   Cpu,
   Database,
   LockKeyhole,
+  LogOut,
   Pause,
   Play,
   RefreshCw,
@@ -15,7 +16,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isSupabaseConfigured, supabase, workspaceId } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import NeuralCoreScene from "../components/NeuralCoreScene";
 import "../sovereignhalt.css";
 
@@ -24,16 +25,14 @@ type FeedState =
   | "connecting"
   | "live"
   | "empty"
-  | "test_scope"
+  | "unauthorized"
   | "error";
 type ActivityStatus = "allowed" | "blocked" | "approval";
 type AgentRecord = {
   id: string;
   name: string;
   description: string;
-  status: string;
   risk: string;
-  calls: number | null;
   agentClass: string;
 };
 type EventRecord = {
@@ -44,6 +43,7 @@ type EventRecord = {
   detail: string;
   status: ActivityStatus;
   risk: string;
+  signal: string;
   createdAt: string;
 };
 type TimeRange = "24h" | "7d" | "30d";
@@ -55,14 +55,6 @@ type ChartBucket = {
   approval: number;
 };
 
-type ScopedWorkspace = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-const SEEDED_WORKSPACE_ID = "11111111-1111-1111-1111-111111111111";
-const SEEDED_WORKSPACE_SLUG = "acme-prod-7f29";
 const EMPTY_AGENTS: AgentRecord[] = [];
 const EMPTY_EVENTS: EventRecord[] = [];
 
@@ -78,8 +70,8 @@ function stateLabel(state: FeedState) {
       return "LIVE • ACTIVE";
     case "connecting":
       return "CONNECTING";
-    case "test_scope":
-      return "TEST SCOPE BLOCKED";
+    case "unauthorized":
+      return "ACCESS DENIED";
     case "error":
       return "SOURCE ERROR";
     default:
@@ -94,13 +86,13 @@ function stateMessage(state: FeedState) {
     case "live":
       return "Workspace records are refreshing every 15 seconds.";
     case "empty":
-      return "The scoped workspace is connected; no agent or event records were returned.";
-    case "test_scope":
-      return "Seeded test-workspace records are hidden. Configure a real workspace to view live agents.";
+      return "Private telemetry API is connected; the workspace is created on the first real SDK event.";
+    case "unauthorized":
+      return "This Supabase account is not allowlisted for the private workspace. No telemetry is displayed.";
     case "error":
-      return "The scoped workspace could not be read. No agent or event records are displayed.";
+      return "The authenticated telemetry API could not be read. No agent or event records are displayed.";
     default:
-      return "Set VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, and VITE_SUPABASE_WORKSPACE_ID to connect a verified workspace.";
+      return "Private Supabase Auth, server telemetry API, or registered real-agent profiles are not configured. No private records are displayed.";
   }
 }
 
@@ -123,27 +115,27 @@ function titleCase(value: string) {
 }
 
 function isLoopSignal(event: EventRecord) {
-  return (
-    event.status === "blocked" &&
-    /\b(loop|looping|repeat(?:ed)?|cycle|recursive|no.progress)\b/i.test(
-      `${event.action} ${event.detail}`
-    )
-  );
+  return event.status === "blocked" && event.signal === "loop_detected";
+}
+
+function latestAgentEvent(agent: AgentRecord, events: EventRecord[]) {
+  return events
+    .filter(event => event.agentId === agent.id)
+    .reduce<EventRecord | null>((current, candidate) => {
+      if (!current) return candidate;
+      return new Date(candidate.createdAt).getTime() > new Date(current.createdAt).getTime()
+        ? candidate
+        : current;
+    }, null);
 }
 
 function agentHealth(agent: AgentRecord, events: EventRecord[]) {
-  const sourceStatus = agent.status.trim().toLowerCase();
-  if (/loop|circuit.open/.test(sourceStatus)) return "Loop Detected";
-  if (
-    events.some(
-      event => event.agentId === agent.id && isLoopSignal(event)
-    )
-  )
-    return "Loop Detected";
-  if (["active", "healthy", "running"].includes(sourceStatus))
-    return "Healthy";
-  if (!sourceStatus) return "Unknown";
-  return titleCase(sourceStatus);
+  const latest = latestAgentEvent(agent, events);
+  if (!latest) return "Unknown";
+  if (latest.signal === "loop_detected") return "Loop Detected";
+  if (latest.signal === "guard_allowed") return "Healthy";
+  if (latest.signal === "approval_required") return "Review";
+  return "Blocked";
 }
 
 function statusClass(status: string) {
@@ -222,7 +214,7 @@ function EmptyPanel({
   state: FeedState;
   compact?: boolean;
 }) {
-  const Icon = state === "error" || state === "test_scope" ? AlertTriangle : Unplug;
+  const Icon = state === "error" ? AlertTriangle : state === "unauthorized" ? LockKeyhole : Unplug;
   return (
     <div className={`sh-empty ${compact ? "is-compact" : ""}`}>
       <Icon size={compact ? 15 : 20} />
@@ -231,8 +223,16 @@ function EmptyPanel({
   );
 }
 
-export default function SovereignHaltDashboard() {
-  const configured = Boolean(isSupabaseConfigured && workspaceId && supabase);
+export default function SovereignHaltDashboard({
+  accessToken,
+  userEmail,
+  onSignOut,
+}: {
+  accessToken: string;
+  userEmail: string;
+  onSignOut: () => void;
+}) {
+  const configured = Boolean(isSupabaseConfigured && supabase);
   const [feedState, setFeedState] = useState<FeedState>(
     configured ? "connecting" : "unconfigured"
   );
@@ -258,7 +258,7 @@ export default function SovereignHaltDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!configured || !workspaceId || !supabase) {
+    if (!configured || !supabase) {
       setAgents([]);
       setEvents([]);
       setWorkspaceName(null);
@@ -268,9 +268,6 @@ export default function SovereignHaltDashboard() {
     }
 
     let active = true;
-    const client = supabase;
-    const scope = workspaceId;
-
     const failClosed = (state: FeedState, name: string | null = null) => {
       if (!active) return;
       setAgents([]);
@@ -279,78 +276,41 @@ export default function SovereignHaltDashboard() {
       setFeedState(state);
     };
 
-    const loadWorkspace = async () => {
+    const loadTelemetry = async () => {
       if (firstLoad.current) setFeedState("connecting");
       try {
-        const workspaceResult = await client
-          .from("workspaces")
-          .select("id, name, slug")
-          .eq("id", scope)
-          .maybeSingle();
+        const response = await fetch("/api/telemetry/dashboard", {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
         if (!active) return;
-        if (workspaceResult.error) {
-          failClosed("error");
-          return;
-        }
-        if (!workspaceResult.data) {
-          failClosed("error");
-          return;
-        }
-
-        const workspace = workspaceResult.data as ScopedWorkspace;
-        const isSeededTestWorkspace =
-          workspace.id === SEEDED_WORKSPACE_ID ||
-          workspace.slug === SEEDED_WORKSPACE_SLUG;
-        if (isSeededTestWorkspace) {
-          failClosed("test_scope");
+        if (response.status === 401 || response.status === 403) {
+          failClosed("unauthorized");
           firstLoad.current = false;
           setLastUpdated(new Date());
           return;
         }
-
-        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const [agentResult, eventResult, policyResult, approvalResult] =
-          await Promise.all([
-            client
-              .from("agents")
-              .select(
-                "id, name, slug, description, status, risk_level, tool_calls, agent_class"
-              )
-              .eq("workspace_id", scope),
-            client
-              .from("audit_events")
-              .select(
-                "id, agent_id, agent_name, action, detail, outcome, risk_level, created_at"
-              )
-              .eq("workspace_id", scope)
-              .gte("created_at", since)
-              .order("created_at", { ascending: false })
-              .limit(250),
-            client
-              .from("policies")
-              .select("id, title, description, scope, enabled")
-              .eq("workspace_id", scope),
-            client
-              .from("approvals")
-              .select(
-                "id, reference, agent_id, action, detail, risk_level, requested_at, status"
-              )
-              .eq("workspace_id", scope)
-              .eq("status", "pending"),
-          ]);
-        if (!active) return;
-        if (
-          agentResult.error ||
-          eventResult.error ||
-          policyResult.error ||
-          approvalResult.error
-        ) {
-          failClosed("error", String(workspace.name ?? "Workspace"));
+        if (response.status === 503) {
+          failClosed("unconfigured");
           firstLoad.current = false;
+          setLastUpdated(new Date());
           return;
         }
+        if (!response.ok) throw new Error("Private telemetry request failed");
 
-        const nextAgents = ((agentResult.data ?? []) as Record<string, unknown>[])
+        const payload = (await response.json()) as {
+          workspace?: { name?: unknown } | null;
+          agents?: unknown;
+          events?: unknown;
+        };
+        if (!Array.isArray(payload.agents) || !Array.isArray(payload.events))
+          throw new Error("Private telemetry response is invalid");
+
+        const nextAgents = (payload.agents as Record<string, unknown>[])
           .flatMap(row => {
             const id = String(row.id ?? "").trim();
             const name = String(row.name ?? "").trim();
@@ -360,46 +320,51 @@ export default function SovereignHaltDashboard() {
                 id,
                 name,
                 description: String(row.description ?? ""),
-                status: String(row.status ?? ""),
                 risk: String(row.risk_level ?? ""),
-                calls:
-                  typeof row.tool_calls === "number" ? row.tool_calls : null,
                 agentClass: String(row.agent_class ?? ""),
               },
             ];
           });
         const agentNames = new Map(nextAgents.map(agent => [agent.id, agent.name]));
-        const nextEvents = ((eventResult.data ?? []) as Record<string, unknown>[])
+        const nextEvents = (payload.events as Record<string, unknown>[])
           .flatMap(row => {
             const result = decision(row.outcome);
             if (!result) return [];
             const agentId = String(row.agent_id ?? "");
+            const agentName = String(row.agent_name ?? "");
+            const action = String(row.action ?? "").trim();
+            const createdAt = String(row.created_at ?? "");
+            const signal = String(row.signal ?? "");
+            if (
+              !agentId ||
+              !agentName ||
+              agentName !== agentNames.get(agentId) ||
+              !["guard_allowed", "loop_detected", "max_iterations_exceeded", "budget_exceeded", "policy_blocked", "approval_required"].includes(signal) ||
+              !action ||
+              !createdAt
+            ) return [];
             return [
               {
-                id: String(row.id ?? `${agentId}-${row.created_at ?? "event"}`),
+                id: String(row.id ?? `${agentId}-${createdAt}`),
                 agentId,
-                agentName: String(
-                  row.agent_name ?? agentNames.get(agentId) ?? ""
-                ),
-                action: String(row.action ?? "Unlabeled event"),
+                agentName,
+                action,
                 detail: String(row.detail ?? ""),
                 status: result,
                 risk: String(row.risk_level ?? ""),
-                createdAt: String(row.created_at ?? ""),
+                signal,
+                createdAt,
               },
             ];
           });
-        const rawPolicies = (policyResult.data ?? []) as Record<string, unknown>[];
-        const rawApprovals = (approvalResult.data ?? []) as Record<string, unknown>[];
 
         if (!active) return;
         setAgents(nextAgents);
         setEvents(nextEvents);
-        setWorkspaceName(String(workspace.name ?? "Workspace"));
+        const name = payload.workspace?.name;
+        setWorkspaceName(typeof name === "string" ? name : "SOVEREIGNHALT PRIVATE FEED");
         setFeedState(
-          nextAgents.length || nextEvents.length || rawPolicies.length || rawApprovals.length
-            ? "live"
-            : "empty"
+          nextAgents.length || nextEvents.length ? "live" : "empty"
         );
         setLastUpdated(new Date());
         firstLoad.current = false;
@@ -409,13 +374,13 @@ export default function SovereignHaltDashboard() {
       }
     };
 
-    void loadWorkspace();
-    const refresh = window.setInterval(() => void loadWorkspace(), 15_000);
+    void loadTelemetry();
+    const refresh = window.setInterval(() => void loadTelemetry(), 15_000);
     return () => {
       active = false;
       window.clearInterval(refresh);
     };
-  }, [configured]);
+  }, [configured, accessToken]);
 
   useEffect(() => {
     if (!agents.some(agent => agent.id === selectedId))
@@ -437,12 +402,11 @@ export default function SovereignHaltDashboard() {
   );
   const selectedAgent = agents.find(agent => agent.id === selectedId) ?? null;
   const loopEvents = visibleEvents.filter(isLoopSignal);
-  const loopAgentIds = new Set([
-    ...agents
-      .filter(agent => agentHealth(agent, visibleEvents) === "Loop Detected")
-      .map(agent => agent.id),
-    ...loopEvents.map(event => event.agentId).filter(Boolean),
-  ]);
+  const loopAgentIds = new Set(
+    agents
+      .filter(agent => agentHealth(agent, events) === "Loop Detected")
+      .map(agent => agent.id)
+  );
   const blockedCount = visibleEvents.filter(event => event.status === "blocked").length;
   const blockRate = visibleEvents.length
     ? `${Math.round((blockedCount / visibleEvents.length) * 100)}%`
@@ -458,7 +422,7 @@ export default function SovereignHaltDashboard() {
     if (!connected) return;
     const report = {
       generatedAt: new Date().toISOString(),
-      source: "workspace-scoped Supabase read",
+      source: "allowlisted private telemetry API",
       workspace: workspaceName,
       selectedWindow: range,
       records: {
@@ -466,9 +430,7 @@ export default function SovereignHaltDashboard() {
           id: agent.id,
           name: agent.name,
           status: agentHealth(agent, events),
-          sourceStatus: agent.status,
           risk: agent.risk || null,
-          toolCalls: agent.calls,
         })),
         events: visibleEvents,
       },
@@ -528,13 +490,19 @@ export default function SovereignHaltDashboard() {
             <span>SEC LEVEL</span>
             <b>{connected ? "WORKSPACE / RO" : "UNBOUND"}</b>
           </span>
+          <span className="sh-auth-user" title={userEmail}>
+            <LockKeyhole size={12} /> <span>{userEmail}</span>
+          </span>
+          <button className="sh-signout-button" onClick={onSignOut} title="Sign out of the private console">
+            <LogOut size={12} /> SIGN OUT
+          </button>
         </div>
       </header>
 
       <div className="sh-source-line" aria-live="polite">
         <span className="sh-source-name">
           <Database size={12} />
-          {workspaceName ?? "SCOPED WORKSPACE FEED"}
+          {workspaceName ?? "SOVEREIGNHALT PRIVATE FEED"}
         </span>
         <span>{stateMessage(feedState)}</span>
         <span className="sh-refresh-time">
@@ -672,7 +640,11 @@ export default function SovereignHaltDashboard() {
                 gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
               >
                 <NeuralCoreScene
-                  agents={agents.map(agent => ({ id: agent.id, name: agent.name, risk: agent.risk }))}
+                  agents={agents.map(agent => ({
+                    id: agent.id,
+                    name: agent.name,
+                    risk: latestAgentEvent(agent, events)?.risk || agent.risk,
+                  }))}
                   selectedId={selectedId}
                   running={running}
                   emergencyStopped={false}
@@ -684,7 +656,7 @@ export default function SovereignHaltDashboard() {
                 <div className="sh-field-empty" aria-live="polite">
                   <span className="sh-field-empty-mark"><Cpu size={23} /></span>
                   <strong>NO VERIFIED AGENT RECORDS</strong>
-                  <small>{connected ? "Workspace connected; no agent rows are available." : "Connect a verified workspace to reveal real agent records."}</small>
+                  <small>{connected ? "Waiting for the first real SDK event in this private workspace." : "Sign in and configure private telemetry to reveal authenticated agent records."}</small>
                 </div>
               )}
               <div className="sh-canvas-readout sh-readout-top">
