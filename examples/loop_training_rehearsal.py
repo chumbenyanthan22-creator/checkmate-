@@ -1,6 +1,6 @@
 """Replay representative agent traces to rehearse and tune loop thresholds.
 
-AgentBreaker is deliberately deterministic rather than an ML model. This rehearsal
+SovereignHalt is deliberately deterministic rather than an ML model. This rehearsal
 is the safe first training step: collect traces, label legitimate polling versus
 no-progress loops, and verify that the chosen threshold blocks only the latter.
 """

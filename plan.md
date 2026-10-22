@@ -1,7 +1,7 @@
 # SovereignHalt runtime dashboard plan
 
 ## Product scope
-Rebuild the existing root dashboard from scratch as SovereignHalt, a dense real-agent runtime console. The single `/` route opens the full-screen dashboard. Retain the existing React/Vite application shell only as required by the project; the new console replaces the former sample-driven root experience. Keep the existing Supabase client, but never substitute fixtures, seeded test-workspace records, synthetic agent nodes, stale values, or guessed telemetry for actual scoped workspace records.
+Rebuild the existing root dashboard from scratch as SovereignHalt, a dense real-agent runtime console. The single `/` route opens the full-screen dashboard. Retain the existing React/Vite application shell only as required by the project; remove unused demo/showcase surfaces from the shipped app. Keep the existing Supabase client, but never substitute fixtures, seeded test-workspace records, synthetic agent nodes, stale values, or guessed telemetry for actual scoped workspace records.
 
 ## Design
 - **Design movement:** high-density holographic cyberpunk operations cockpit.
@@ -22,8 +22,9 @@ Rebuild the existing root dashboard from scratch as SovereignHalt, a dense real-
 - Replace demo fallbacks with explicit unconfigured, connecting, live, empty, test-workspace, and error states. Query failure clears data. Show LIVE • ACTIVE only after a successful scoped read; otherwise show the true source state.
 - Derive counts, event chart buckets, status badges, and risk summaries only from returned rows and timestamps. Show “Loop Detected” only when a source status or blocked loop-related event supports it. Do not present a guessed forecast; state that prediction is unavailable until a real prediction source exists.
 - Build the requested root view in `SovereignHaltDashboard.tsx`, reusing React Three Fiber/drei/Three.js for the force-directed Canvas. Render only actual workspace agent records; render the selected real record as the large center-stage robotic avatar and arrange other verified agents around it. Give each record a dimensional robotic form, luminous faceplate/core, reactive aura and rotating gyroscopic rings. Keep the field scaffold abstract, with no unlabeled/synthetic agent-like objects. Animated links are clearly labeled as visual layout, not observed agent-to-agent traffic.
+- Bound the Canvas height independently of viewport height; reflow columns on portrait/narrow desktop-site viewports so the 3D scene and labels remain contained without excessive blank height or horizontal overflow.
 - Keep Pause, Export Log, Isolate Agent, and Recalibrate functional but local to the preview. Export only loaded records; no live pause/isolation command is sent.
-- Update document title, root route title, app icon, and visible wordmark to SovereignHalt; preserve unrelated Python guard, cost-tracking data model, and platform configuration.
+- Update document title, root route title, frontend package metadata, README product heading and visible wordmark to SovereignHalt; preserve the Python import namespace and existing database schema/data contracts.
 
 ## Project structure
 - `client/src/pages/Home.tsx`: root route entry to the new dashboard.

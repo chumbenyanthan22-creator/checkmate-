@@ -753,7 +753,6 @@ export default function NeuralCoreScene({
   const motionEnabled = running && !emergencyStopped;
   const ambientGeometry = useMemo(makeAmbientParticles, []);
   const graphAgents = useMemo<GraphAgent[]>(() => agents, [agents]);
-  const summary = `${graphAgents.length} WORKSPACE AGENT NODE${graphAgents.length === 1 ? "" : "S"}`;
 
   useEffect(() => () => ambientGeometry.dispose(), [ambientGeometry]);
 
@@ -796,18 +795,6 @@ export default function NeuralCoreScene({
         reducedMotion={reducedMotion}
         pointSize={0.021}
       />
-      <Text
-        position={[0, 2.25, 0]}
-        fontSize={0.09}
-        color={emergencyStopped ? "#ff7890" : "#9defff"}
-        anchorX="center"
-        anchorY="middle"
-        letterSpacing={0.08}
-        outlineWidth={0.008}
-        outlineColor="#03070d"
-      >
-        {summary}
-      </Text>
       <HolographicStage
         motionEnabled={motionEnabled}
         reducedMotion={reducedMotion}

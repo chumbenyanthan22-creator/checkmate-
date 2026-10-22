@@ -1,1 +1,1 @@
-"""Runnable AgentBreaker examples."""
+"""Runnable SovereignHalt integration scenarios."""

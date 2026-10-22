@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""Zero-dependency Checkmate demo.
+"""Zero-dependency SovereignHalt loop-guard scenarios.
 
-Shows:
-1) Identical tool loop blocked after 3 repeats
-2) max_iterations hard cap (no external services required)
+Checks an identical tool loop and a max_iterations hard cap without external services.
 
 Run from repo root:
-  python examples/loop_demo.py
+  python examples/loop_scenarios.py
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-# Allow running without install: python examples/loop_demo.py
+# Allow running without install: python examples/loop_scenarios.py
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -21,10 +19,10 @@ if str(ROOT) not in sys.path:
 from agentbreaker import Detector, ToolCall  # noqa: E402
 
 
-def demo_identical_loop() -> None:
-    print("=== Demo 1: identical tool loop ===")
+def scenario_identical_loop() -> None:
+    print("=== Scenario 1: identical tool loop ===")
     detector = Detector(loop_threshold=3)
-    agent_id = "demo-agent"
+    agent_id = "scenario-agent"
     args = {"query": "status"}
 
     for i in range(1, 5):
@@ -32,13 +30,13 @@ def demo_identical_loop() -> None:
         decision = detector.evaluate(call)
         print(f"  call {i}: {decision.action} — {decision.reason}")
         if decision.action == "blocked":
-            print("  ✓ Loop killed before another dispatch\n")
+            print("  ✓ Loop stopped before another dispatch\n")
             return
     print("  ✗ Expected a block\n")
 
 
-def demo_max_iterations() -> None:
-    print("=== Demo 2: max_iterations hard cap ===")
+def scenario_max_iterations() -> None:
+    print("=== Scenario 2: max_iterations hard cap ===")
     detector = Detector(loop_threshold=99, max_iterations=5)
     agent_id = "budget-agent"
 
@@ -54,9 +52,9 @@ def demo_max_iterations() -> None:
 
 
 def main() -> None:
-    print("Checkmate — pre-dispatch guard demo (no API keys, no Supabase)\n")
-    demo_identical_loop()
-    demo_max_iterations()
+    print("SovereignHalt — pre-dispatch guard scenarios (no API keys, no Supabase)\n")
+    scenario_identical_loop()
+    scenario_max_iterations()
     print("Done. Integrate Detector / LoopBreakerHandler before your next model or tool call.")
 
 

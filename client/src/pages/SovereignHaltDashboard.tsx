@@ -59,7 +59,6 @@ type ScopedWorkspace = {
   id: string;
   name: string;
   slug: string;
-  plan: string;
 };
 
 const SEEDED_WORKSPACE_ID = "11111111-1111-1111-1111-111111111111";
@@ -285,7 +284,7 @@ export default function SovereignHaltDashboard() {
       try {
         const workspaceResult = await client
           .from("workspaces")
-          .select("id, name, slug, plan")
+          .select("id, name, slug")
           .eq("id", scope)
           .maybeSingle();
         if (!active) return;
@@ -301,9 +300,7 @@ export default function SovereignHaltDashboard() {
         const workspace = workspaceResult.data as ScopedWorkspace;
         const isSeededTestWorkspace =
           workspace.id === SEEDED_WORKSPACE_ID ||
-          workspace.slug === SEEDED_WORKSPACE_SLUG ||
-          (workspace.name === "Acme Systems" &&
-            String(workspace.plan).toLowerCase() === "demo");
+          workspace.slug === SEEDED_WORKSPACE_SLUG;
         if (isSeededTestWorkspace) {
           failClosed("test_scope");
           firstLoad.current = false;
@@ -683,6 +680,13 @@ export default function SovereignHaltDashboard() {
                   onSelectAgent={setSelectedId}
                 />
               </Canvas>
+              {agents.length === 0 && (
+                <div className="sh-field-empty" aria-live="polite">
+                  <span className="sh-field-empty-mark"><Cpu size={23} /></span>
+                  <strong>NO VERIFIED AGENT RECORDS</strong>
+                  <small>{connected ? "Workspace connected; no agent rows are available." : "Connect a verified workspace to reveal real agent records."}</small>
+                </div>
+              )}
               <div className="sh-canvas-readout sh-readout-top">
                 <span><i className={connected ? "is-active" : ""} /> {connected ? "SCOPED WORKSPACE" : "NO LIVE SOURCE"}</span>
                 <span>{connected ? `${agents.length} NODES` : "— NODES"}</span>

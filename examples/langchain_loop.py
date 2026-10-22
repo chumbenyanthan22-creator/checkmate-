@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end looping agent stopped by CheckmateHandler.
+"""End-to-end looping agent stopped by the existing CheckmateHandler API.
 
 No API key. No Supabase. Same object you pass as callbacks=[CheckmateHandler(...)].
 
@@ -18,7 +18,7 @@ from agentbreaker import CheckmateHandler, LoopDetectedException  # noqa: E402
 
 
 def run_looping_agent(handler: CheckmateHandler, calls: list[tuple[str, dict]]) -> str:
-    """Stand-in for an agent that keeps calling tools until Checkmate stops it."""
+    """Stand-in for an agent that keeps calling tools until the guard stops it."""
     for step, (tool_name, args) in enumerate(calls, start=1):
         print(f"step {step}: {tool_name}({args})", flush=True)
         try:
@@ -31,10 +31,10 @@ def run_looping_agent(handler: CheckmateHandler, calls: list[tuple[str, dict]]) 
 
 
 def main() -> None:
-    print("Checkmate LangChain callback — looping agent\n", flush=True)
+    print("SovereignHalt LangChain callback — looping agent\n", flush=True)
 
     print("--- identical tool loop ---", flush=True)
-    identical = CheckmateHandler(session_id="loop-demo", loop_threshold=3, max_iterations=20)
+    identical = CheckmateHandler(session_id="loop-scenario", loop_threshold=3, max_iterations=20)
     status = run_looping_agent(
         identical,
         [("search", {"q": "invoice status"})] * 5,
@@ -43,13 +43,13 @@ def main() -> None:
         raise SystemExit("expected the identical loop to be blocked")
 
     print("\n--- soft loop (args change every step) ---", flush=True)
-    soft = CheckmateHandler(session_id="soft-demo", loop_threshold=99, max_iterations=4)
+    soft = CheckmateHandler(session_id="soft-scenario", loop_threshold=99, max_iterations=4)
     status = run_looping_agent(
         soft,
         [("search", {"q": f"page-{i}"}) for i in range(1, 8)],
     )
     if status != "blocked":
-        raise SystemExit("expected max_iterations to kill the soft loop")
+        raise SystemExit("expected max_iterations to stop the soft loop")
 
     try:
         from langchain_core.callbacks import BaseCallbackHandler

@@ -1,8 +1,8 @@
-# Checkmate
+# SovereignHalt
 
-Pre-dispatch guard for AI agents. Kills identical tool loops and hard-caps a session before the next model or tool call goes out.
+Real-agent runtime observability with a pre-dispatch guard for AI tool loops. Stop repeated tool calls and enforce a hard session limit before the next model or tool call goes out.
 
-## 1. Install
+## 1. Install the Python SDK
 
 ```bash
 git clone https://github.com/chumbenyanthan22-creator/checkmate-.git
@@ -10,17 +10,17 @@ cd checkmate-
 pip install -e .
 ```
 
-Python 3.11+. The zero-dependency demo below does not need this install.
+Python 3.11+. The local scenarios below use no API key or external service.
 
-## 2. Demo
+## 2. Run local guard scenarios
 
 ```bash
-python examples/loop_demo.py
+python examples/loop_scenarios.py
 ```
 
-Base Python only. You should see the third identical call blocked, then a session with changing arguments die at `max_iterations`.
+The script checks that an identical tool loop is blocked and that a session with changing arguments stops at `max_iterations`.
 
-## 3. LangChain
+## 3. LangChain integration
 
 ```python
 from agentbreaker import CheckmateHandler
@@ -40,4 +40,4 @@ Run the same callback against a local looping agent (no API key):
 python examples/langchain_loop.py
 ```
 
-`CheckmateHandler` blocks inside `on_tool_start` before the tool runs. Identical calls trip the loop rule. Calls whose arguments keep changing still stop when the session crosses `max_iterations`.
+`CheckmateHandler` is the existing SDK API name; it blocks inside `on_tool_start` before the tool runs. Identical calls trip the loop rule. Calls whose arguments keep changing still stop when the session crosses `max_iterations`.
