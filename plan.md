@@ -4,18 +4,19 @@
 Rebuild the existing root dashboard as SovereignHalt, a dense real-agent runtime console. The single `/` route opens the dashboard. Remove unused demo/showcase surfaces from the shipped app. Only actual records produced by the repository's Python SDK may appear; never substitute seeded test-workspace records, synthetic agent nodes, stale values, or guessed telemetry.
 
 ## Design
-- **Design movement:** high-density holographic cyberpunk operations cockpit.
-- **Core principles:** real records only; the 3D network is the visual focal point; compact telemetry stays legible; authenticated source state and local visualization controls are distinct from runtime enforcement.
-- **Color philosophy:** deep black keeps the scene cinematic; neon cyan signals observed activity, ultraviolet signals system structure, and red is reserved for source-recorded loop/block signals.
-- **Layout paradigm:** compact top console header; a three-column field with agent status, real-time metrics, and activity chart at left; force-directed WebGL agent graph in the center; sourced analytics and system log at right; operator strip below.
-- **Signature elements:** luminous microchip wordmark, translucent telemetry panels, and a cinematic field of detailed robotic agent avatars with gyroscopic halos and animated data-light around actual records.
-- **Interaction philosophy:** selecting an agent focuses its real node; pause/resume, isolate and recalibrate act only on the local visualization; export contains only authenticated, workspace-scoped records.
-- **Animation:** smooth force-directed motion, animated hologram scan/glow, rotating agent-specific gyroscopic rings, atmospheric particles, and flowing edge pulses; respect reduced-motion preferences; pause stops visualization motion without claiming to pause a runtime.
-- **Typography system:** Space Grotesk for interface copy, IBM Plex Mono for compact telemetry labels, tabular numerals for measured values.
-- **Brand essence:** an inspectable boundary around autonomous runtime behavior; precise, vigilant, composed.
+- **Design movement:** a dense industrial-cyberpunk reverse-engineering control room, adapted to the real SovereignHalt agent-telemetry domain.
+- **Core principles:** three compact horizontal rooms; high information density without sacrificing legibility; only authenticated source records count as data; operational commands are never implied when an action is visualization-only.
+- **Color philosophy:** near-pure black gives the interface a terminal-like stage; electric cyan marks verified telemetry and selected focus; vivid orange marks operator emphasis and panel indices; red appears only for source-recorded blocked/loop signals.
+- **Layout paradigm:** compact top status/metrics rail; three stacked full-width zones—verified agent signals, structured SDK event contract/selected agent view, and observed outcomes/audit log—followed by a terminal-style source/status strip and the existing local visualization controls. Within each zone, dense subpanels echo the screenshot’s control-room composition.
+- **Signature elements:** orange robot/chip insignia; thin cyan/orange signal rails with moving scan particles; compact glass panels and record cards with clipped technical labels.
+- **Interaction philosophy:** agent selection focuses only a real registered record; Pause/Resume affects visualization motion, Isolate affects only the selected visualization node, Recalibrate resets only view state, and Export contains only authenticated loaded records.
+- **Animation:** continuous low-amplitude particle/scan motion on rails and conveyors; cards themselves represent only actual returned agents/events and are never duplicated to imply more data. Keep the R3F scene mapped one-to-one to real agent records, respect reduced-motion preferences, and make pause stop visualization motion without claiming to pause a runtime.
+- **Typography system:** Space Grotesk for interface copy, IBM Plex Mono for compact telemetry and terminal labels, tabular numerals for measured values.
+- **Brand essence:** SovereignHalt is a private, inspectable boundary around autonomous runtime behavior; precise, vigilant, composed.
 - **Brand voice:** concise and operational. Examples: “Only verified workspace records.” and “No prediction is shown without a connected model.”
-- **Wordmark/mark:** cyan-violet holographic microchip glyph paired with the bold SOVEREIGNHALT wordmark.
-- **Signature brand color:** electric cyan `#56E6FF`, paired with ultraviolet `#A679FF`.
+- **Wordmark/mark:** retain the final SOVEREIGNHALT brand with an orange robot/chip glyph; use “AGENT BREAKER” as the console descriptor, not as a product rename.
+- **Signature brand color:** electric cyan `#56E6FF` paired with vivid orange `#FF713D`; red remains reserved for source-recorded critical/blocked states.
+- **Reference/data integrity:** the screenshot’s REA/Ghidra/binary/SPEC.md/byte-match/planted/ship values are not current telemetry sources. Adapt their panel structure to real authenticated agents and SDK events; show unavailable/empty states instead of fabricated records, counters, logs, code execution, or prediction. Ambient animation is decorative and must not read as agent activity.
 
 ## Implementation
 - **Private dashboard authentication:** use Supabase email OTP, persist the session in the browser, and require an explicit server-side `SOVEREIGNHALT_ALLOWED_EMAILS` allowlist. Do not fetch or render workspace data before the authenticated user passes that allowlist. If auth configuration is missing or access is denied, fail closed with a clear sign-in/denied state.
