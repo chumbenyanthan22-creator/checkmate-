@@ -1,4 +1,5 @@
 import type { ApiRequest, ApiResponse } from "../../server/api/telemetry/common";
+import ingestHandler from "../../server/api/telemetry/ingest";
 
 export default async function ingestRoute(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Cache-Control", "private, no-store, max-age=0");
@@ -11,6 +12,5 @@ export default async function ingestRoute(request: ApiRequest, response: ApiResp
     return response.status(405).json({ error: "method_not_allowed" });
   }
 
-  const { default: ingestHandler } = await import("../../server/api/telemetry/ingest");
   return ingestHandler(request, response);
 }
