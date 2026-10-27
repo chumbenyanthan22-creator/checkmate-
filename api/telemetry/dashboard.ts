@@ -1,5 +1,5 @@
-import type { ApiRequest, ApiResponse } from "../../server/api/telemetry/common";
-import dashboardHandler from "../../server/api/telemetry/dashboard";
+import type { ApiRequest, ApiResponse } from "../../server/api/telemetry/common.js";
+import dashboardHandler from "../../server/api/telemetry/dashboard.js";
 
 export default async function dashboardRoute(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Cache-Control", "private, no-store, max-age=0");

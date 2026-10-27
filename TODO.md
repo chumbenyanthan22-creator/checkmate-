@@ -27,6 +27,10 @@
 - [x] **Live-feeling visual motion.** Animate decorative flow rails, scan beams, and ambient particles continuously with cyan/orange accents, and use Framer Motion for restrained panel transitions. Conveyors may render real agent/event cards only; do not clone or synthesize records to fill them. The selected-agent R3F visualization remains one-to-one with verified agents. Honor `prefers-reduced-motion` and keep visualization Pause distinct from runtime execution.
 - [x] **Preserve private access and local-only actions.** Keep the Supabase OTP/allowlist gate and server-side read API unchanged. Preserve EXPORT LOG as an export of loaded authenticated rows, ISOLATE AGENT and RECALIBRATE as local visualization actions, and PAUSE/RESUME as view-motion controls; do not issue database writes, migrations, or runtime commands as part of the redesign.
 
+## Production API runtime recovery (requested 2026-10-27)
+
+- [ ] **Restore Vercel API startup and fail-closed responses.** Resolve the Node ESM local-module import failure so `GET /api/telemetry/dashboard` without a bearer token returns HTTP 401 with `authentication_required`, and `GET /api/telemetry/ingest` returns HTTP 405 with `Allow: POST`. Preserve Supabase server-side token verification, confirmed-email and allowlist checks, private/no-store headers, and the fixed workspace scope. Keep shared handlers outside the deployable `api/` function tree. Do not change Supabase data, schema, migrations, or Vercel environment values. Validate, push to `main`, and verify the production status codes.
+
 ## Existing cost-tracking outcomes
 
 - [ ] Add estimate-based `CostCalculator` with config-loaded model pricing.

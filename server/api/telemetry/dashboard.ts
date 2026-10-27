@@ -7,12 +7,12 @@ import {
   setPrivateHeaders,
   type ApiRequest,
   type ApiResponse,
-} from "./common";
+} from "./common.js";
 import {
   parseConfiguredAgents,
   signalResult,
   type ConfiguredAgent,
-} from "./ingest";
+} from "./ingest.js";
 
 type GuardSignal = keyof typeof signalResult;
 type AgentRow = {

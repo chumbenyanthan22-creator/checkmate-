@@ -9,7 +9,7 @@ import {
   setPrivateHeaders,
   type ApiRequest,
   type ApiResponse,
-} from "./common";
+} from "./common.js";
 
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const actionPattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,119}$/;

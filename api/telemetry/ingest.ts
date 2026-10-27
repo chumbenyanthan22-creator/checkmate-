@@ -1,5 +1,5 @@
-import type { ApiRequest, ApiResponse } from "../../server/api/telemetry/common";
-import ingestHandler from "../../server/api/telemetry/ingest";
+import type { ApiRequest, ApiResponse } from "../../server/api/telemetry/common.js";
+import ingestHandler from "../../server/api/telemetry/ingest.js";
 
 export default async function ingestRoute(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Cache-Control", "private, no-store, max-age=0");
