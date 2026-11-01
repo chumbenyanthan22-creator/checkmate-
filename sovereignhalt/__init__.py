@@ -19,10 +19,13 @@ from agentbreaker import (
 from agentbreaker.cost_calculator import CostCalculator
 from agentbreaker.slack_alerter import SlackAlerter
 from agentbreaker.supabase_logger import SupabaseLogger
+from .client import AgentHaltedError, AgentStatusUnavailable, SovereignHaltClient
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "AgentHaltedError",
+    "AgentStatusUnavailable",
     "BudgetExceededException",
     "CheckmateHandler",
     "CostCalculator",
@@ -35,6 +38,7 @@ __all__ = [
     "LoopDetectedException",
     "LoopDetector",
     "SlackAlerter",
+    "SovereignHaltClient",
     "SupabaseLogger",
     "ToolCall",
 ]

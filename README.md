@@ -81,3 +81,35 @@ python examples/langchain_loop.py
 ```
 
 `CheckmateHandler` is the existing SDK API name; it blocks inside `on_tool_start` before the tool runs. Identical calls trip the loop rule. Calls whose arguments keep changing still stop when the session crosses `max_iterations`.
+
+
+## Multi-tenant v1 API (manual activation required)
+
+The new multi-tenant API is staged in `supabase/pending/20261030_sovereignhalt_mvp_schema.sql` and remains disabled until an owner reviews/applies that SQL and configures the server-only Supabase service-role key plus `SOVEREIGNHALT_TENANT_BACKEND_ENABLED=true` in Vercel. Do not point a client agent at it before those steps. Unlike the legacy registry API above, v1 uses tenant memberships, registered agent UUIDs, and one-time `sh_live_…` per-agent keys created by an authenticated tenant owner/admin. See [`SUPABASE.md`](SUPABASE.md) for the full endpoint and activation contract.
+
+Set the v1 agent's secret environment values (use the one-time key returned by `POST /api/v1/agents`, not a legacy registry token):
+
+```bash
+SOVEREIGNHALT_API_V1_URL=https://<your-vercel-domain>/api/v1/telemetry
+SOVEREIGNHALT_INGEST_TOKEN=<this-agent's-v1-key>
+SOVEREIGNHALT_AGENT_ID=<registered-agent-uuid>
+SOVEREIGNHALT_STATUS_FAIL_CLOSED=true
+```
+
+For a LangChain agent, install the web extra and pass the client to the existing pre-dispatch handler:
+
+```python
+import os
+from sovereignhalt import LoopBreakerHandler, SovereignHaltClient, SupabaseLogger
+
+control = SovereignHaltClient.from_env()
+handler = LoopBreakerHandler(
+    session_id="<runtime-session-id>",
+    logger=SupabaseLogger(),
+    agent_id=os.environ["SOVEREIGNHALT_AGENT_ID"],
+    remote_control=control,
+)
+result = agent.invoke({"input": "..."}, config={"callbacks": [handler]})
+```
+
+The SDK checks the remote agent status before each tool dispatch, sends keyed signatures instead of raw arguments/output, and stops before the next action when HALT/CUT is active or status cannot be verified. Telemetry failures latch the fail-closed guard for subsequent calls. This is cooperative: a command cannot interrupt a tool already running. The REST status poll is the SDK path; an authenticated WebSocket status stream is also available for compatible clients.

@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0", "python-multipart>=0.0.9"]
+web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0", "python-multipart>=0.0.9", "httpx>=0.27.0,<1.0"]
 test = ["pytest>=8.0", "httpx>=0.27.0", "fastapi>=0.115.0", "python-multipart>=0.0.9"]
 
 [project.urls]
@@ -34,7 +34,7 @@ Homepage = "https://github.com/chumbenyanthan22-creator/checkmate-"
 Repository = "https://github.com/chumbenyanthan22-creator/checkmate-.git"
 
 [tool.setuptools.packages.find]
-include = ["agentbreaker*", "sovereignhalt*"]
+include = ["agentbreaker*", "sovereignhalt*", "sovereignhalt_api*"]
 
 [tool.setuptools.package-data]
 agentbreaker = ["pricing_config.json"]

@@ -29,3 +29,21 @@ Review and manually apply these migrations in timestamp order: `supabase/migrati
 ## Deployment prerequisites
 
 The Vercel connector was not authorized for this task, so production environment values have not been changed. Before public access, an owner should review and apply all three migrations above, configure the browser/server variables, create the allowlisted Supabase Auth user, deploy the API functions, and register at least one actual Python producer with its own token and real identity. Until a genuine SDK event arrives, the authenticated dashboard intentionally shows an empty state rather than sample data.
+
+
+## Multi-tenant v1 backend (staged; not active)
+
+The new tenant API schema is in `supabase/pending/20261030_sovereignhalt_mvp_schema.sql`. It creates the `sh_*` tenant, workspace, membership, agent, private API-key, and event-log tables with RLS and service-role-only write RPCs. The SQL has **not** been applied. Do not move it into `supabase/migrations/` or run it without explicit owner approval. The v1 API also fails closed while `SOVEREIGNHALT_TENANT_BACKEND_ENABLED` is unset or false.
+
+After an owner reviews/applies that file to the intended Supabase project, the owner must set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SOVEREIGNHALT_TENANT_BACKEND_ENABLED=true` in Vercel's server-only environment. Do not use a publishable/anon key for the server role. `SOVEREIGNHALT_ALLOWED_EMAILS` remains the platform-admin allowlist for tenant provisioning. An authenticated, confirmed allowlisted user creates a tenant with `POST /api/v1/tenants`; tenant owners/admins add existing Supabase Auth users with `POST /api/v1/tenants/{tenant_id}/members` and create agents with `POST /api/v1/agents`.
+
+`POST /api/v1/agents` returns a generated per-agent `sh_live_…` bearer token **once**. Store it in that agent's secret manager. `POST /api/v1/agents/{agent_id}/keys` atomically revokes prior active keys and returns the replacement once; `DELETE /api/v1/agents/{agent_id}/keys/{key_id}` revokes a key. Keep this v1 key distinct from any legacy registry token even though the Python SDK reads it from `SOVEREIGNHALT_INGEST_TOKEN`.
+
+The agent SDK posts bounded structured events to `POST /api/v1/telemetry` using `Authorization: Bearer <agent-key>`. It sends an HMAC tool signature and optional HMAC output fingerprint, not raw tool arguments or output. The transactional SQL RPC deduplicates event UUIDs, examines the latest five tool-call records, marks the fifth matching record as a loop, sets the agent to `HALTED`, and rejects subsequent new telemetry while preserving idempotent retries. Optional alerts use `SOVEREIGNHALT_ALERT_WEBHOOK_URL` plus `SOVEREIGNHALT_ALERT_WEBHOOK_SECRET`; only tenant/agent/event UUIDs are sent with an HMAC signature. No webhook is attempted unless both values are set.
+
+`GET /api/v1/agents/{agent_id}/status` is the SDK's pre-tool status poll. The authenticated status WebSocket is `/api/v1/agents/{agent_id}/status/ws`; send the token in the first JSON frame as `{"token":"…"}` (never in the URL). The SDK defaults to fail-closed status checks and latches after an event cannot be acknowledged; it cannot interrupt work already in flight. `PUT /api/v1/agents/{agent_id}/status?tenant_id=…` accepts `HALT`, `CUT`, or `RESUME` from an authenticated tenant operator. `GET /api/v1/dashboard` reads only the signed-in user's memberships and returns active agents only when they have recent telemetry, while retaining explicit halted/disabled records.
+
+This v1 surface is not yet wired into the existing browser dashboard. The current UI remains on the prior authenticated/allowlisted telemetry API until a separate frontend integration is completed. No tenant workspace, user membership, API key, or event record has been provisioned by this code change.
+
+
+The status WebSocket is bounded to 120 seconds by the API; compatible clients should reconnect with a fresh socket and send the current agent token in the first JSON frame again. The Python SDK currently uses the REST polling endpoint instead.
