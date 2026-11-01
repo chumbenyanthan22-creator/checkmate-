@@ -121,16 +121,62 @@ export default async function dashboardHandler(request: ApiRequest, response: Ap
     return respond(response, 503, { error: "dashboard_access_not_configured" });
 
   try {
-    const { data: claimsData, error: claimsError } = await admin.auth.getClaims(token);
-    const userId = claimsData?.claims?.sub;
-    if (claimsError || typeof userId !== "string")
-      return respond(response, 401, { error: "authentication_required" });
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    if (!supabaseUrl || !serviceKey)
+      return respond(response, 503, { error: "private_data_source_unconfigured" });
 
-    const { data: authData, error: authError } = await admin.auth.admin.getUserById(userId);
-    const user = authData.user;
+    let projectUrl: URL;
+    try {
+      projectUrl = new URL(supabaseUrl);
+    } catch {
+      return respond(response, 503, { error: "private_data_source_unconfigured" });
+    }
+    const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(projectUrl.hostname);
+    if (
+      projectUrl.username ||
+      projectUrl.password ||
+      projectUrl.search ||
+      projectUrl.hash ||
+      (projectUrl.protocol !== "https:" && !isLocal)
+    )
+      return respond(response, 503, { error: "private_data_source_unconfigured" });
+
+    const authEndpoint = new URL("/auth/v1/user", projectUrl);
+    let authResponse: Response;
+    try {
+      authResponse = await fetch(authEndpoint, {
+        method: "GET",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      return respond(response, 503, { error: "authentication_backend_unavailable" });
+    }
+    if (authResponse.status === 401 || authResponse.status === 403)
+      return respond(response, 401, { error: "authentication_required" });
+    if (!authResponse.ok)
+      return respond(response, 503, { error: "authentication_backend_unavailable" });
+
+    let user: {
+      email?: string | null;
+      email_confirmed_at?: string | null;
+      confirmed_at?: string | null;
+    } | null;
+    try {
+      user = (await authResponse.json()) as typeof user;
+    } catch {
+      return respond(response, 503, { error: "authentication_backend_unavailable" });
+    }
     const email = user?.email ?? null;
     const verifiedEmail = Boolean(user?.email_confirmed_at || user?.confirmed_at);
-    if (authError || !email || !verifiedEmail)
+    if (!email || !verifiedEmail)
       return respond(response, 401, { error: "authentication_required" });
     if (!emailIsAllowlisted(email, allowedEmails))
       return respond(response, 403, { error: "dashboard_access_denied" });
