@@ -1,5 +1,7 @@
 import json
+import re
 import sys
+import tomllib
 from pathlib import Path
 from types import ModuleType
 from uuid import UUID, uuid4
@@ -309,3 +311,13 @@ def test_staged_sql_has_tenant_isolation_atomic_loop_checks_and_null_safe_roles(
     assert "GRANT ALL ON public.sh_tenants" in sql and "TO service_role" in sql
     assert "TO authenticated" in sql
     assert "GRANT INSERT" not in sql and "GRANT UPDATE" not in sql
+
+
+def test_vercel_runtime_imports_are_default_project_dependencies():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    config = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    dependencies = {
+        re.match(r"([A-Za-z0-9._-]+)", requirement).group(1).lower()
+        for requirement in config["project"]["dependencies"]
+    }
+    assert {"fastapi", "httpx"}.issubset(dependencies)

@@ -85,7 +85,7 @@ python examples/langchain_loop.py
 
 ## Multi-tenant v1 API (manual activation required)
 
-The new multi-tenant API is staged in `supabase/pending/20261030_sovereignhalt_mvp_schema.sql` and remains disabled until an owner reviews/applies that SQL and configures the server-only Supabase service-role key plus `SOVEREIGNHALT_TENANT_BACKEND_ENABLED=true` in Vercel. Do not point a client agent at it before those steps. Unlike the legacy registry API above, v1 uses tenant memberships, registered agent UUIDs, and one-time `sh_live_…` per-agent keys created by an authenticated tenant owner/admin. See [`SUPABASE.md`](SUPABASE.md) for the full endpoint and activation contract.
+The new multi-tenant API is staged in `supabase/pending/20261030_sovereignhalt_mvp_schema.sql` and remains disabled until an owner reviews/applies that SQL and configures the server-only Supabase service-role key plus `SOVEREIGNHALT_TENANT_BACKEND_ENABLED=true` in Vercel. Do not point a client agent at it before those steps. Unlike the legacy registry API above, v1 uses tenant memberships, registered agent UUIDs, and one-time `sh_live_…` per-agent keys created by an authenticated tenant owner/admin. FastAPI and HTTPX are default project dependencies because Vercel installs Python imports from the project manifest/lockfile. See [`SUPABASE.md`](SUPABASE.md) for the full endpoint and activation contract.
 
 Set the v1 agent's secret environment values (use the one-time key returned by `POST /api/v1/agents`, not a legacy registry token):
 
