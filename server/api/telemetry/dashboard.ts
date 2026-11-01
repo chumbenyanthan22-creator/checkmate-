@@ -121,7 +121,12 @@ export default async function dashboardHandler(request: ApiRequest, response: Ap
     return respond(response, 503, { error: "dashboard_access_not_configured" });
 
   try {
-    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    const { data: claimsData, error: claimsError } = await admin.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+    if (claimsError || typeof userId !== "string")
+      return respond(response, 401, { error: "authentication_required" });
+
+    const { data: authData, error: authError } = await admin.auth.admin.getUserById(userId);
     const user = authData.user;
     const email = user?.email ?? null;
     const verifiedEmail = Boolean(user?.email_confirmed_at || user?.confirmed_at);
