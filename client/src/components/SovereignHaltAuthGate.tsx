@@ -82,22 +82,22 @@ export default function SovereignHaltAuthGate() {
   return (
     <main className="sh-auth-page">
       <section className="sh-auth-card" aria-labelledby="sh-auth-title">
-        <div className="sh-auth-topline"><span><i /> PRIVATE WORKSPACE</span><span>AUTH GATE / 01</span></div>
+        <div className="sh-auth-topline"><span><i /> OWNER ACCESS</span><span>AUTH GATE / 01</span></div>
         <div className="sh-auth-brand">
           <span className="sh-chip-mark"><Cpu size={25} strokeWidth={1.7} /></span>
-          <div><strong>SOVEREIGNHALT</strong><small>RUNTIME OBSERVABILITY / CONTROL SURFACE</small></div>
+          <div><strong>SOVEREIGNHALT</strong><small>Loop and budget guard for LangChain agents</small></div>
         </div>
         <div className="sh-auth-rule" />
         <div className="sh-auth-copy">
           <span className="sh-auth-kicker"><ShieldCheck size={14} /> AUTHENTICATION REQUIRED</span>
-          <h1 id="sh-auth-title">Private agent telemetry.</h1>
-          <p>Sign in with a provisioned Supabase account. Workspace data is released only to the server allowlist.</p>
+          <h1 id="sh-auth-title">Stop runaway agents before they cost you.</h1>
+          <p>Owner sign-in for SovereignHalt alerts and reports.</p>
         </div>
 
         {gateState === "checking" ? (
           <div className="sh-auth-message" role="status"><i /> VERIFYING AUTHENTICATED SESSION</div>
         ) : gateState === "unconfigured" ? (
-          <div className="sh-auth-message is-error" role="alert">Private Supabase Auth is not configured for this deployment. No telemetry is shown.</div>
+          <div className="sh-auth-message is-error" role="alert">Private Supabase Auth is not configured for this deployment. No data is shown.</div>
         ) : (
           <form className="sh-auth-form" onSubmit={requestLink}>
             <label htmlFor="sh-auth-email">AUTHORIZED EMAIL</label>
